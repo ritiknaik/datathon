@@ -31,6 +31,7 @@ from fastapi.responses import JSONResponse
 
 from evaluator import card_rank, card_suit, cards_to_str, omaha_score, warmup  # handy helpers, see evaluator.py
 from game import Action, AgentConfig, HandResult, Observation, Street
+from bot import strategy
 
 # Build omaha_score's lookup table now, while the server starts, instead of
 # during your first decision (where it would eat into your time bank).
@@ -39,8 +40,9 @@ from game import Action, AgentConfig, HandResult, Observation, Street
 warmup()
 
 # rename as your team/bot's name
-PARTICIPANT = "TotallyAwesomeDatathonParticipant"
-AGENT_NAME = "JustAsAwesomeAgent"
+PARTICIPANT = "Straight Flush"
+AGENT_NAME = "Patrick Jane"
+PARAMS = strategy.load_params()
 
 
 # ===== YOUR CODE HERE =====
@@ -55,7 +57,7 @@ def new_half(config: AgentConfig, memory: dict) -> None:
     In the tournament, each half runs in a brand-new copy of your server,
     so nothing you learn in one half carries over to the other half.
     """
-    memory["hands_played"] = 0
+    strategy.new_half(config.num_hands, memory)
 
 
 def choose_action(obs: Observation, memory: dict) -> Action:
@@ -86,11 +88,13 @@ def choose_action(obs: Observation, memory: dict) -> Action:
     scores your hand (higher is better).
     """
 
-    # Simple example of a heuristic bot, which just checks when it is of no cost, otherwise folds
-    # Replace this with your strategy!
-    if obs.to_call == 0:
-        return Action.CHECK_CALL
-    return Action.FOLD
+    try:
+        action = strategy.decide(obs, memory, PARAMS)
+        if action in obs.legal_actions:
+            return action
+    except Exception:
+        traceback.print_exc()
+    return Action.CHECK_CALL  # always legal
 
 
 def on_hand_end(result: HandResult, memory: dict) -> None:
@@ -104,7 +108,10 @@ def on_hand_end(result: HandResult, memory: dict) -> None:
     went_to_showdown, board (cards revealed), opp_hole (opponent's cards,
     only after a showdown, else None), winner ('me', 'opp' or 'split').
     """
-    memory["hands_played"] += 1
+    try:
+        strategy.hand_end(result, memory)
+    except Exception:
+        traceback.print_exc()
 
 # ===== END OF YOUR CODE =====
 

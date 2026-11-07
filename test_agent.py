@@ -195,3 +195,22 @@ def test_reads_port_from_environment():
 # ---------------------------------------------------------------------------
 # Add your own tests below, e.g. "with two aces preflop my bot raises".
 # ---------------------------------------------------------------------------
+
+
+def test_params_load_and_scenario_override(bot):
+    from bot import strategy
+    P = strategy.load_params()
+    P["scenarios"] = [{"when": {"street": "PREFLOP"}, "probs": {"CHECK_CALL": 1}}]
+    mem = {}
+    strategy.new_half(10, mem)
+    obs = Game(make_deal(1, 0), 0).observation(0)
+    assert all(strategy.decide(obs, mem, P) == Action.CHECK_CALL for _ in range(20))
+
+
+def test_decisions_fit_time_budget(bot):
+    import time
+    _, client = bot
+    start_half(client)
+    t = time.perf_counter()
+    n = len(play_hands(client, 100, seed="timing"))
+    assert (time.perf_counter() - t) / n < 0.02, "decisions too slow"

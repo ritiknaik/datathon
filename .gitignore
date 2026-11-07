@@ -1,0 +1,21 @@
+# Python / env
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Local run outputs (judge results, tuning runs, scratch params)
+runs/
+out.json
+h1.json
+h2.json
+*.log
+bot/params_old.json
+
+# Editor / OS / agent
+.vscode/
+.idea/
+.claude/
+.DS_Store
+Thumbs.db
