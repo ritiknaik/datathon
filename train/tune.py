@@ -18,7 +18,7 @@ from multiprocessing import Pool
 
 from selfplay import match, opponent_pool, strategy, warmup
 
-TUNABLE = ["temperature", "bet_discount", "called_penalty", "agg_prior", "fold_prior"]
+TUNABLE = ["temperature", "bet_discount", "called_penalty", "agg_prior", "fold_prior", "prior_weight"]
 WORST_N = 4
 
 

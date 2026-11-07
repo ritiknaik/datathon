@@ -152,6 +152,9 @@ Output: `bb/deal 11.556  CI [8.995, 14.118]` (our result, and its 95% interval).
 | `agg_prior`, `fold_prior`, `prior_weight` | Starting guesses about the opponent before data arrives |
 | `time_budget` | Seconds of thinking per half that the bot allows itself (the tournament limit is 8) |
 | `mc_n`, `mc_min`, `sample_cost` | Monte Carlo sample count, and when it drops to the fast fallback |
+| `discount_needs_raise` | 1 = apply `bet_discount` only against a real raise, not when the small blind just completes the forced blind (v3 uses 1) |
+| `use_equity_model`, `equity_model_streets` | Optional Databricks equity model (`bot/equity_model.py` + `equity_weights.npz`). Off by default: it was a wash in bb/deal (see `context/notes.md`). `equity_model_streets` limits it, e.g. `["PREFLOP","FLOP"]` |
+| `preflop_mc_n` | Monte Carlo samples for the preflop instead of the linear estimate (0 = off; tested worse) |
 
 ### Real-life scenarios (`bot/scenarios.json`)
 These are hand-written rules that override the bot's choice. The first matching rule wins. The `when` keys are all optional: `street`, `facing` (whether we face a bet), `is_button`, `eq_min`, `eq_max` (our equity, 0–1).

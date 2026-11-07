@@ -17,7 +17,7 @@ from .equity import mc_equity, preflop_equity, warmup_np
 
 try:  # optional: numpy-only learned equity model exported from Databricks (bot/equity_model.py, predict(hole, board))
     from . import equity_model
-except ImportError:
+except Exception:  # missing file, missing/corrupt weights, anything: never fail at startup
     equity_model = None
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -47,7 +47,9 @@ def _equity(obs, memory: dict, P: dict) -> float:
     if memory["eq"] and memory["eq"][0] == key:
         return memory["eq"][1]
     eq = None
-    if equity_model is not None:
+    # opt-in: set in params.json after train/compare.py ACCEPTs it; "equity_model_streets" limits it to some streets
+    if equity_model is not None and P.get("use_equity_model") \
+            and obs.street.name in P.get("equity_model_streets", ("PREFLOP", "FLOP", "TURN", "RIVER")):
         try:
             eq = float(equity_model.predict(obs.hole_cards, obs.board))
             eq = eq if 0.0 <= eq <= 1.0 else None
@@ -82,7 +84,9 @@ def decide(obs, memory: dict, P: dict) -> Action:
     opponent.observe(obs, memory)
     eq = _equity(obs, memory, P)
     agg, fold = opponent.rates(memory, P)
-    if obs.to_call > 0:  # a bet from a passive opponent means more than one from a maniac
+    # a bet from a passive opponent means more than one from a maniac; the small blind completing the
+    # forced blind is not a bet, so "discount_needs_raise" skips the discount unless a raise was made
+    if obs.to_call > 0 and (obs.raises_this_street > 0 or not P.get("discount_needs_raise")):
         eq = max(0.0, eq - P["bet_discount"] * (1 - agg))
 
     pot, tc = obs.pot, obs.to_call

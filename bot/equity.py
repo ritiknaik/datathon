@@ -3,10 +3,11 @@ import math
 from collections import Counter
 from itertools import combinations
 
-from evaluator import get_table, omaha_score
+from evaluator import omaha_score
 
-try:  # numpy is in the tournament base image; without it we fall back to the slow pure-Python path
+try:  # numpy is in the tournament base image; without it (or without get_table) use the pure-Python path
     import numpy as np
+    from evaluator import get_table
 except ImportError:  # pragma: no cover
     np = None
 
@@ -53,8 +54,12 @@ def _np_tables():
 
 
 def warmup_np() -> None:
+    global np
     if np is not None:
-        _np_tables()
+        try:
+            _np_tables()
+        except Exception:  # the evaluator changed under us: never fail at startup, use the pure-Python path
+            np = None
 
 
 def omaha_scores(hole, board):

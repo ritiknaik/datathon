@@ -237,7 +237,7 @@ def test_mc_equity_is_a_probability_on_every_street():
 
 def test_learned_equity_model_is_used_and_a_broken_one_falls_back(bot):
     from bot import strategy
-    P = strategy.load_params()
+    P = {**strategy.load_params(), "use_equity_model": 1}
     obs = Game(make_deal(1, 0), 0).observation(0)
 
     class Good:
@@ -274,3 +274,33 @@ def test_stronger_baselines_always_return_a_legal_action():
                 game.apply(a)
             if end:
                 end(game.hand_result(0), mem)
+
+
+def test_model_is_off_unless_params_ask_for_it(bot):
+    from bot import strategy
+    P = strategy.load_params()  # no "use_equity_model" key
+    obs = Game(make_deal(1, 0), 0).observation(0)
+
+    class Loud:
+        predict = staticmethod(lambda hole, board: 0.123)
+
+    old = strategy.equity_model
+    try:
+        strategy.equity_model = Loud
+        mem = {}
+        strategy.new_half(10, mem)
+        assert strategy._equity(obs, mem, P) != 0.123
+    finally:
+        strategy.equity_model = old
+
+
+def test_a_broken_model_module_cannot_stop_the_bot_from_starting(tmp_path):
+    # an equity_model.py that raises at import (e.g. its weights file is missing) must not break startup
+    import shutil
+    import subprocess
+    shutil.copytree(os.path.join(BUNDLE, "bot"), tmp_path / "bot", ignore=shutil.ignore_patterns("__pycache__"))
+    (tmp_path / "bot" / "equity_model.py").write_text("import numpy as np\nnp.load('equity_weights_missing.npz')\n")
+    code = "from bot import strategy; print(strategy.equity_model)"
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join([str(tmp_path), BUNDLE])}
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, cwd=str(tmp_path))
+    assert out.returncode == 0 and out.stdout.strip() == "None", out.stderr

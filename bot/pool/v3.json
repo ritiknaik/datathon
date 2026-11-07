@@ -1,0 +1,30 @@
+{
+  "preflop": {
+    "bias": 0.2318,
+    "pairs": 0.0563,
+    "trips": -0.1251,
+    "suits2": 0.0338,
+    "suits4": -0.0296,
+    "ace_suited": -0.0113,
+    "conn": 0.0398,
+    "high": 0.3235
+  },
+  "time_budget": 4.0,
+  "decisions_per_hand": 2.0,
+  "sample_cost": 0.00012,
+  "mc_n": 60,
+  "mc_min": 8,
+  "temperature": 0.0515,
+  "bet_discount": 0.373,
+  "called_penalty": 0.0887,
+  "fe_scale": {
+    "PREFLOP": 1.5,
+    "FLOP": 1.1027,
+    "TURN": 0.8626,
+    "RIVER": 0.7895
+  },
+  "prior_weight": 18.6375,
+  "agg_prior": 0.1354,
+  "fold_prior": 0.1389,
+  "discount_needs_raise": 1
+}
