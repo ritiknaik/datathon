@@ -1,13 +1,13 @@
 {
   "preflop": {
-    "bias": 0.2403,
-    "pairs": 0.0525,
-    "trips": -0.1301,
-    "suits2": 0.0364,
-    "suits4": -0.036,
-    "ace_suited": -0.0148,
-    "conn": 0.0268,
-    "high": 0.3237
+    "bias": 0.2318,
+    "pairs": 0.0563,
+    "trips": -0.1251,
+    "suits2": 0.0338,
+    "suits4": -0.0296,
+    "ace_suited": -0.0113,
+    "conn": 0.0398,
+    "high": 0.3235
   },
   "time_budget": 4.0,
   "decisions_per_hand": 2.0,

@@ -51,7 +51,7 @@ if __name__ == "__main__":
     best, best_s = base, score(base, base, a.deals, f"tune{a.seed}")
     for i in range(a.iters):
         cand = perturb(best, rng, a.sigma)
-        s = score(cand, base, a.deals, f"tune{a.seed}-{i}")
+        s = score(cand, base, a.deals, f"tune{a.seed}")  # same deals for every candidate = fair comparison
         if s > best_s:
             best, best_s = cand, s
         print(i, round(s, 3), "best", round(best_s, 3), flush=True)

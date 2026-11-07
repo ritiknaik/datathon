@@ -1,6 +1,6 @@
 # Notes (shared hackathon context)
 
-Last updated: 2026-11-07 (bot v1: equity + mixed strategy + opponent model)
+Last updated: 2026-11-07 (bot v1.1: preflop refit, tuning round 1 results)
 
 ## Problem statement
 - TAMU Datathon Poker Bot Challenge: Heads-Up Short Deck (36 cards) 5-card Pot-Limit Omaha.
@@ -21,14 +21,17 @@ Last updated: 2026-11-07 (bot v1: equity + mixed strategy + opponent model)
 
 ## Current state of the code
 - `agent.py`: names set, and the 3 functions delegate to `bot/strategy.py` inside try/except (fallback CHECK_CALL). Server plumbing untouched.
-- `bot/equity.py`: preflop features (linear weights fitted by `train/fit_preflop.py`, R²≈0.66) and Monte Carlo equity.
+- `bot/equity.py`: preflop features (linear weights fitted by `train/fit_preflop.py` on 5000 hands × 300 samples, R²≈0.77) and Monte Carlo equity.
 - `bot/opponent.py`: opponent stats kept in `memory`. `bot/strategy.py`: EV, softmax, scenarios, and a time-budget throttle.
 - `train/`: `selfplay.py` (fast in-process duplicate match), `fit_preflop.py`, `tune.py`, `grace.slurm`.
-- Results (judge, 1000 deals, seed 7): beats random +9.6, always_pot +6.3, calling_station +7.4, always_half +11.4 bb/deal. All wins, 0 errors, ≤5 s thinking per half.
+- Results (judge, 1000 deals, seeds 11 and 42): random +12.5/+11.2, always_pot +7.3/+7.0, calling_station +8.1/+8.6, always_half +11.2/+12.2 bb/deal. 8/8 wins, 0 errors, ≤5.5 s thinking per half.
+- Tuning round 1 (6 local chains × 15 iters): no candidate beat the current params on held-out deals (one lost significantly). Tuning against the baselines alone overfits, so the next round must tune against stronger opponents (past bests, aggressive/passive variants).
+- Time budget matters: `time_budget` 3.0 lost −2.0 bb/deal (significant) to 4.0. A faster equity engine (more MC samples) is the clearest strength lever.
 - How to run everything: `RUNNING.md`.
 
 ## Key decisions
 - Keep the plumbing in `agent.py` unchanged. Strategy code lives in `bot/`.
-- `time_budget` is 4.0 s, leaving margin under the 8 s limit for a slower tournament machine.
+- `time_budget` is 4.0 s. The judge also counts ~1.5 s per half of request overhead, which the bot's own timer can't see, so the total is ≈5.5 of 8 s.
+- `train/tune.py` scores every candidate in a chain on the same deals (fair comparison). Always validate winners on held-out seeds; don't trust `--pick` alone.
 - Use `127.0.0.1`, not `localhost`, for judge URLs (the judge failed to reach the bots through `localhost` on Windows).
 - numpy is a dev-only dependency (training). The base image already has it, and `requirements.txt` is unchanged.
