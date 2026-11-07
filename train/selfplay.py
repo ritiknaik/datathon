@@ -1,26 +1,33 @@
 """In-process duplicate match (no HTTP), mirroring judge_engine.play_half/combine_halves.
 
-A player is a params dict (our strategy) or a baseline name: random | call | half | pot.
+A player is a params dict (our strategy) or a baseline name:
+random | call | half | pot | add1 | add2 | add3 | add4 (add1-4 = baseline-bots/baseline-add-1..4).
     python train/selfplay.py --opp random --deals 500
 """
 import argparse
+import glob
 import math
 import os
 import random
 import statistics
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.join(ROOT, "baseline-bots"))
 from evaluator import warmup  # noqa: E402
 from game import Action, Game, button_for_deal, make_deal  # noqa: E402
 from bot import strategy  # noqa: E402
+import opponents  # noqa: E402  (baseline-add-1..4: add1 | add2 | add3 | add4)
 
 BASELINES = {
     "random": lambda obs, m: m["rng"].choice(obs.legal_actions),
     "call": lambda obs, m: Action.CHECK_CALL,
     "half": lambda obs, m: Action.RAISE_HALF if Action.RAISE_HALF in obs.legal_actions else Action.CHECK_CALL,
     "pot": lambda obs, m: Action.RAISE_POT if Action.RAISE_POT in obs.legal_actions else Action.CHECK_CALL,
+    **{k: act for k, (act, _) in opponents.STYLES.items()},
 }
+HAND_END = {k: end for k, (_, end) in opponents.STYLES.items() if end}
 
 
 class Player:
@@ -41,6 +48,8 @@ class Player:
     def end(self, result):
         if isinstance(self.spec, dict):
             strategy.hand_end(result, self.m)
+        elif self.spec in HAND_END:
+            HAND_END[self.spec](result, self.m)
 
 
 def play_half(seats, seed, deals):
@@ -66,6 +75,14 @@ def match(a, b, deals=500, seed="selfplay", rng_seed=0):
     mean = sum(bb) / deals
     se = statistics.stdev(bb) / math.sqrt(deals)
     return mean, mean - 1.96 * se, mean + 1.96 * se
+
+
+def opponent_pool():
+    """name -> opponent spec: every baseline plus each saved past version in bot/pool/*.json."""
+    pool = {k: k for k in BASELINES}
+    for f in sorted(glob.glob(os.path.join(strategy.HERE, "pool", "*.json"))):
+        pool["pool/" + os.path.basename(f)[:-5]] = strategy.load_params(f)
+    return pool
 
 
 if __name__ == "__main__":

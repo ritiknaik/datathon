@@ -21,6 +21,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 BUNDLE = HERE if os.path.isfile(os.path.join(HERE, "game.py")) else os.path.dirname(HERE)
 sys.path.insert(0, BUNDLE)  # so agent.py can import game.py and evaluator.py
 
+sys.path.insert(0, os.path.join(BUNDLE, "baseline-bots"))  # stronger baselines (opponents.py)
 from game import Action, AgentConfig, Game, make_deal  # noqa: E402
 from judge_engine import coerce_action  # noqa: E402  (reads answers exactly like the judge)
 
@@ -214,3 +215,62 @@ def test_decisions_fit_time_budget(bot):
     t = time.perf_counter()
     n = len(play_hands(client, 100, seed="timing"))
     assert (time.perf_counter() - t) / n < 0.02, "decisions too slow"
+
+
+def test_vectorised_scoring_matches_the_evaluator():
+    import numpy as np
+    from bot.equity import omaha_scores
+    from evaluator import omaha_score
+    r = random.Random(3)
+    cards = [r.sample(range(36), 10) for _ in range(200)]
+    got = omaha_scores(np.array([c[:5] for c in cards]), np.array([c[5:] for c in cards]))
+    assert list(got) == [omaha_score(c[:5], c[5:]) for c in cards]
+
+
+def test_mc_equity_is_a_probability_on_every_street():
+    from bot.equity import mc_equity
+    r = random.Random(4)
+    for k in (0, 3, 4, 5):
+        s = r.sample(range(36), 5 + k)
+        assert 0.0 <= mc_equity(s[:5], s[5:], 50, r) <= 1.0
+
+
+def test_learned_equity_model_is_used_and_a_broken_one_falls_back(bot):
+    from bot import strategy
+    P = strategy.load_params()
+    obs = Game(make_deal(1, 0), 0).observation(0)
+
+    class Good:
+        predict = staticmethod(lambda hole, board: 0.42)
+
+    class Broken:
+        @staticmethod
+        def predict(hole, board):
+            raise RuntimeError("bad weights")
+
+    old = strategy.equity_model
+    try:
+        for model, expected in ((Good, 0.42), (Broken, None)):
+            strategy.equity_model = model
+            mem = {}
+            strategy.new_half(10, mem)
+            eq = strategy._equity(obs, mem, P)
+            assert (eq == expected) if expected is not None else (0.0 <= eq <= 1.0)
+    finally:
+        strategy.equity_model = old
+
+
+def test_stronger_baselines_always_return_a_legal_action():
+    import opponents
+    r = random.Random(5)
+    for name, (act, end) in opponents.STYLES.items():
+        mem = {"rng": random.Random(6)}
+        for hand in range(40):
+            game = Game(make_deal(name, hand), button_seat=hand % 2, hand_index=hand)
+            while not game.is_terminal:
+                obs = game.observation(game.to_act)
+                a = act(obs, mem) if game.to_act == 0 else r.choice(obs.legal_actions)
+                assert a in obs.legal_actions
+                game.apply(a)
+            if end:
+                end(game.hand_result(0), mem)

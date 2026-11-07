@@ -41,6 +41,11 @@ python baseline-bots/baseline_random.py
 python baseline-bots/baseline_always_pot.py
 python baseline-bots/baseline_always_half.py
 python baseline-bots/baseline_calling_station.py
+# stronger opponents that look at their cards (see baseline-bots/opponents.py):
+python baseline-bots/baseline-add-1.py     # ValueBettor: solid, never bluffs
+python baseline-bots/baseline-add-2.py     # Maniac: raises pot ~45% of the time
+python baseline-bots/baseline-add-3.py     # Nit: only plays strong hands, folds a lot
+python baseline-bots/baseline-add-4.py     # Adaptive: bluffs more if we fold a lot
 
 # Terminal 3: the judge
 python judge_engine.py --agent1 http://127.0.0.1:5008 --agent2 http://127.0.0.1:5009 --seed 7
@@ -124,7 +129,7 @@ Press Ctrl+C in each terminal. If a port says "already in use":
 
 This plays a full duplicate match in-process. Use it for trying ideas.
 ```
-python train/selfplay.py --opp random --deals 500          # opponents: random | call | half | pot
+python train/selfplay.py --opp random --deals 500          # opponents: random | call | half | pot | add1 | add2 | add3 | add4
 python train/selfplay.py --opp pot --deals 1000 --seed abc
 python train/selfplay.py --opp bot/params_old.json         # vs another saved params file
 ```
@@ -170,6 +175,22 @@ Other useful fields in `out.json`: `paired_bb` (our result per deal), `ci`, and 
 
 ---
 
+## 4b. Hand data and decision audit (optional, local)
+
+Play 8 baselines x several seeds over HTTP and flatten every hand and action into two CSVs (git-ignored, in `data/`):
+```
+python tools/gen_hands.py                      # all 8 baselines x seeds 7 11 42, 1000 deals (about 15 min)
+python tools/gen_hands.py --seeds 7 --opps add1 add3 --deals 200 --out data/quick
+```
+Then audit our decisions (replays each hand, compares our equity with the pot odds we were getting; immediate pot odds only, so read the numbers as a ranking):
+```
+python tools/audit.py                          # about 30 s on 10 cores; writes data/audit_decisions.csv
+python tools/audit.py --data data/quick --sample 0.2
+```
+The CSVs can be uploaded to Databricks (`hands`, `actions`, `audit_decisions`).
+
+---
+
 ## 5. Re-fit preflop strength
 
 This simulates random hands, then fits the `preflop` weights in `bot/params.json`:
@@ -186,7 +207,15 @@ python train/fit_preflop.py --hands 3000 --samples 200     # about 45 s on a lap
 python train/tune.py --iters 20 --deals 300 --seed 1 --out runs/1.json
 python train/tune.py --pick runs        # copy the best run into bot/params.json
 ```
-It prints `iteration  score  best` per attempt. Run several seeds in parallel terminals for more coverage.
+It prints `iteration  score  best` per attempt. Run several seeds in parallel terminals for more coverage (`--procs 10` scores one candidate on 10 cores).
+
+**The opponent pool.** A candidate plays the 8 baselines (4 originals + `add1`..`add4`), every saved past version in `bot/pool/*.json`, and 3 style variants of the incumbent (loose, sticky, tight). Its score is the mean of the 4 **worst** results, so it can't win just by beating weak bots. After accepting a new version, copy it to `bot/pool/vN.json` so future candidates must beat it too.
+
+**Accept test (held-out seeds).** Never install a winner on the tuner's score alone:
+```
+python train/compare.py bot/params.json runs/1.json --deals 1000 --seeds hold1 hold2
+```
+It prints bb/deal vs every pool opponent, the mean and the worst result, and a head-to-head match vs the incumbent. It says `ACCEPT` only if the head-to-head interval is entirely above 0 and neither the pool mean nor the worst result is lower. Use seeds the tuner never saw.
 
 ### On the Grace cluster (Slurm)
 ```

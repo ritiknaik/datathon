@@ -1,6 +1,6 @@
 """Play judge matches with hand logs on and flatten them into two CSVs (for Databricks etc).
 
-    python tools/gen_hands.py                           # 4 baselines x seeds 7 11 42, 1000 deals
+    python tools/gen_hands.py                           # 8 baselines (random always_pot calling_station always_half add1..add4) x seeds 7 11 42
     python tools/gen_hands.py --deals 200 --seeds 7 --opps random
 Output (git-ignored): data/hands.csv (one row per hand), data/actions.csv (one row per action).
 Local only: it starts agent.py on :5008 and a baseline on :5009 for each match.
@@ -14,7 +14,7 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OPPS = ["random", "always_pot", "calling_station", "always_half"]
+OPPS = ["random", "always_pot", "calling_station", "always_half", "add1", "add2", "add3", "add4"]
 HAND_COLS = ["match_id", "opponent", "seed", "half", "deal_index", "button_seat", "our_seat", "our_is_button",
              "our_hole", "opp_hole", "board", "pot", "went_to_showdown", "ended_by_fold", "final_street",
              "num_actions", "our_net", "opp_net"]
@@ -52,7 +52,8 @@ def main():
             env = {**os.environ, "BOT_TRACE": ""}
             bot = subprocess.Popen([sys.executable, "agent.py"], cwd=ROOT, env={**env, "PORT": "5008"},
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            ob = subprocess.Popen([sys.executable, f"baseline-bots/baseline_{opp}.py"], cwd=ROOT,
+            script = f"baseline-add-{opp[3:]}.py" if opp.startswith("add") else f"baseline_{opp}.py"
+            ob = subprocess.Popen([sys.executable, f"baseline-bots/{script}"], cwd=ROOT,
                                   env={**env, "PORT": "5009"}, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             try:
                 with tempfile.TemporaryDirectory() as tmp:
