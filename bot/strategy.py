@@ -6,14 +6,17 @@ import json
 import math
 import os
 import random
+import sys
 import time
 
+from evaluator import cards_to_str
 from game import RAISE_ACTIONS, Action, Street
 
 from . import opponent
 from .equity import mc_equity, preflop_equity
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+TRACE = os.environ.get("BOT_TRACE") == "1"  # watching only: one line per decision on stderr, off by default
 
 
 def load_params(path: str = os.path.join(HERE, "params.json")) -> dict:
@@ -81,12 +84,23 @@ def decide(obs, memory: dict, P: dict) -> Action:
             ev[a] = fe * pot + (1 - fe) * (eq_called * (pot + add + opp_add) - add)
 
     probs = _scenario(obs, eq, P)
+    from_scenario = probs is not None
     if probs is None:
         scale = P["temperature"] * max(pot, 1)
         top = max(ev.values())
         probs = {a: math.exp((v - top) / scale) for a, v in ev.items()}
     actions = list(probs)
     action = memory["rng"].choices(actions, weights=[probs[a] for a in actions])[0]
+
+    if TRACE:
+        total = sum(probs.values())
+        print(f"[bot] hand {obs.hand_index} {obs.street.name} cards {cards_to_str(obs.hole_cards)} "
+              f"board {cards_to_str(obs.board) or '-'} | equity {eq:.2f} | to_call {tc} pot {pot} "
+              f"| opp aggr {agg:.2f} fold {fold:.2f} | EV " +
+              " ".join(f"{a.name}={v:.1f}" for a, v in ev.items()) +
+              " | mix " + " ".join(f"{a.name}={probs[a] / total:.2f}" for a in actions) +
+              f" | {'scenario' if from_scenario else 'mixed'} -> {action.name}",
+              file=sys.stderr, flush=True)
 
     opponent.mark_action(action, memory)
     memory["t"] += time.perf_counter() - t0

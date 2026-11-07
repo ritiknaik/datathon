@@ -19,3 +19,6 @@ bot/params_old.json
 .claude/
 .DS_Store
 Thumbs.db
+
+# Generated hand logs (tools/gen_hands.py)
+data/

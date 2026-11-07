@@ -1,6 +1,6 @@
 # Notes (shared hackathon context)
 
-Last updated: 2026-11-07 (bot v1.1: preflop refit, tuning round 1 results)
+Last updated: 2026-11-07 (watch tools, hand data, decision audit)
 
 ## Problem statement
 - TAMU Datathon Poker Bot Challenge: Heads-Up Short Deck (36 cards) 5-card Pot-Limit Omaha.
@@ -28,6 +28,9 @@ Last updated: 2026-11-07 (bot v1.1: preflop refit, tuning round 1 results)
 - Tuning round 1 (6 local chains × 15 iters): no candidate beat the current params on held-out deals (one lost significantly). Tuning against the baselines alone overfits, so the next round must tune against stronger opponents (past bests, aggressive/passive variants).
 - Time budget matters: `time_budget` 3.0 lost −2.0 bb/deal (significant) to 4.0. A faster equity engine (more MC samples) is the clearest strength lever.
 - How to run everything: `RUNNING.md`.
+- Watch tools (all off by default, local only): judge `--verbose` prints every hand; `BOT_TRACE=1` prints the bot's equity/EV/mix per decision. `tools/gen_hands.py` writes `data/hands.csv` + `data/actions.csv` (git-ignored; loaded into Databricks as `workspace.default.hands/actions`). `tools/audit.py` replays them and compares our equity with pot odds.
+- Audit findings (24k hands vs the 4 baselines; immediate pot odds only, so upper bounds): we fold too many hands worth calling, mostly vs always_pot (≈40 bb/100 hands) and always_half (≈27); 91% of preflop folds were +EV calls. Most big showdown losses were bad luck (equity ≥0.5), not bad commits. Part of the leak is the softmax noise (`temperature`).
+- Not done yet: opponent pool in tuning, faster/vectorised `mc_equity`, learned equity model (Databricks), Docker build check (Docker CLI + Colima installed locally, daemon not started).
 
 ## Key decisions
 - Keep the plumbing in `agent.py` unchanged. Strategy code lives in `bot/`.

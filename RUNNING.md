@@ -54,6 +54,32 @@ python judge_engine.py --agent1 http://127.0.0.1:5008 --agent2 http://127.0.0.1:
 | `--deals 200` | Quick run (default is 1000 deals per half) |
 | `--seed 42` | Different cards. The same seed always deals the same cards |
 | `--json out.json --logs` | Save the full result and every hand to a file |
+| `--verbose` | Print every hand as it finishes: cards, board, every action, the result. Watching only, off by default |
+
+### Watching the bot's reasoning (optional, off by default)
+
+These switches only print to your terminal. They don't change play, scoring, or the submission, and the tournament never sets them.
+
+| What | How to turn on | How to turn off |
+|---|---|---|
+| Every hand, both seats | add `--verbose` to the judge command | leave it out |
+| Our bot's decision per action: equity, opponent stats, EV per action, the mix, and whether a scenario rule fired | start the bot with `BOT_TRACE=1`, e.g. `BOT_TRACE=1 PORT=5008 python agent.py` (macOS/Linux). On Windows PowerShell: `$env:BOT_TRACE=1; $env:PORT=5008; python agent.py` | start the bot without `BOT_TRACE` |
+
+Bot trace lines look like this:
+`[bot] hand 0 FLOP cards 6h Th ... | equity 0.47 | to_call 4 pot 12 | opp aggr 0.36 fold 0.30 | EV ... | mix ... | mixed -> RAISE_HALF`
+
+The bot's `hand` number starts at 0, while the judge's hand number starts at 1.
+
+Full watch setup, in three terminals with the venv active:
+```
+# Terminal 1: our bot, with its reasoning shown
+BOT_TRACE=1 PORT=5008 python agent.py
+# Terminal 2: opponent
+PORT=5009 python baseline-bots/baseline_random.py
+# Terminal 3: judge, every hand shown
+python judge_engine.py --agent1 http://127.0.0.1:5008 --agent2 http://127.0.0.1:5009 --seed 7 --deals 50 --verbose
+```
+Swap the opponent for any other baseline, or for another bot port, to compare how our bot plays against each one.
 
 ### Reading the report
 | Line | Meaning |
