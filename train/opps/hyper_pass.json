@@ -1,0 +1,70 @@
+{
+  "preflop": {
+    "bias": 0.2318,
+    "pairs": 0.0563,
+    "trips": -0.1251,
+    "suits2": 0.0338,
+    "suits4": -0.0296,
+    "ace_suited": -0.0113,
+    "conn": 0.0398,
+    "high": 0.3235
+  },
+  "time_budget": 4.0,
+  "decisions_per_hand": 2.0,
+  "sample_cost": 0.00012,
+  "mc_n": 60,
+  "mc_min": 8,
+  "temperature": 0.01,
+  "bet_discount": 0.05,
+  "called_penalty": 0.02,
+  "fe_scale": {
+    "PREFLOP": 0.15,
+    "FLOP": 0.15,
+    "TURN": 0.15,
+    "RIVER": 0.15
+  },
+  "prior_weight": 20,
+  "agg_prior": 0.3,
+  "fold_prior": 0.3,
+  "scenarios": [
+    {
+      "when": {
+        "facing": true,
+        "eq_max": 0.18
+      },
+      "probs": {
+        "FOLD": 0.85,
+        "CHECK_CALL": 0.15
+      }
+    },
+    {
+      "when": {
+        "facing": false,
+        "eq_min": 0.85
+      },
+      "probs": {
+        "RAISE_POT": 0.5,
+        "RAISE_HALF": 0.3,
+        "CHECK_CALL": 0.2
+      }
+    },
+    {
+      "when": {
+        "eq_min": 0.3
+      },
+      "probs": {
+        "CHECK_CALL": 0.92,
+        "RAISE_HALF": 0.08
+      }
+    },
+    {
+      "when": {
+        "facing": false
+      },
+      "probs": {
+        "CHECK_CALL": 0.8,
+        "RAISE_HALF": 0.2
+      }
+    }
+  ]
+}

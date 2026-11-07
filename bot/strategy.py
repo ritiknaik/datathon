@@ -19,8 +19,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 def load_params(path: str = os.path.join(HERE, "params.json")) -> dict:
     with open(path, encoding="utf-8") as f:
         P = json.load(f)
-    with open(os.path.join(HERE, "scenarios.json"), encoding="utf-8") as f:
-        P["scenarios"] = json.load(f)
+    if "scenarios" not in P:  # a params file may carry its own rules (e.g. train/opps/*.json)
+        with open(os.path.join(HERE, "scenarios.json"), encoding="utf-8") as f:
+            P["scenarios"] = json.load(f)
     return P
 
 
@@ -41,8 +42,10 @@ def _equity(obs, memory: dict, P: dict) -> float:
     if obs.street != Street.PREFLOP:
         left = max(1, memory["hands"] - obs.hand_index)
         per_decision = (P["time_budget"] - memory["t"]) / (left * P["decisions_per_hand"])
-        n = min(P["mc_n"], int(per_decision / P["sample_cost"]))
-        if n >= P["mc_min"]:
+        # Never fall off a cliff on a slow/shared CPU: keep a cheap floor of mc_min samples
+        # until this half's time_budget is actually spent (the 8 s bank stays protected).
+        n = min(P["mc_n"], max(P["mc_min"], int(per_decision / P["sample_cost"]))) if memory["t"] < P["time_budget"] else 0
+        if n:
             eq = mc_equity(obs.hole_cards, obs.board, n, memory["rng"])
     memory["eq"] = (key, eq)
     return eq

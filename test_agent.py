@@ -214,3 +214,12 @@ def test_decisions_fit_time_budget(bot):
     t = time.perf_counter()
     n = len(play_hands(client, 100, seed="timing"))
     assert (time.perf_counter() - t) / n < 0.02, "decisions too slow"
+
+
+def test_shipped_params_are_competition_legal():
+    # Training-only overrides live in train/local/ (git-ignored) and must never reach bot/params.json.
+    import json
+    P = json.load(open(os.path.join(BUNDLE, "bot", "params.json"), encoding="utf-8"))
+    # Hard limits: 8 s thinking per half (incl. ~1.5 s+ request overhead we can't see), 1 s per request.
+    assert P["time_budget"] <= 5.0, "time_budget must leave margin under the 8 s/half time bank"
+    assert P["mc_n"] * P["sample_cost"] < 0.05, "one decision must stay far below the 1 s per-request limit"

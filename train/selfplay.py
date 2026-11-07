@@ -4,6 +4,7 @@ A player is a params dict (our strategy) or a baseline name: random | call | hal
     python train/selfplay.py --opp random --deals 500
 """
 import argparse
+import json
 import math
 import os
 import random
@@ -13,7 +14,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from evaluator import warmup  # noqa: E402
 from game import Action, Game, button_for_deal, make_deal  # noqa: E402
-from bot import strategy  # noqa: E402
+from bot import opponent, strategy  # noqa: E402
 
 BASELINES = {
     "random": lambda obs, m: m["rng"].choice(obs.legal_actions),
@@ -24,8 +25,9 @@ BASELINES = {
 
 
 class Player:
-    def __init__(self, spec, rng_seed):
+    def __init__(self, spec, rng_seed, log=None, label=""):
         self.spec, self.rng_seed = spec, rng_seed
+        self.log, self.label, self.rows = log, label, []  # log: list collecting one row per decision (training only)
 
     def start(self, deals):
         self.m = {}
@@ -34,21 +36,43 @@ class Player:
         self.m["rng"] = random.Random(self.rng_seed)
 
     def act(self, obs):
-        if isinstance(self.spec, dict):
-            return strategy.decide(obs, self.m, self.spec)
-        return BASELINES[self.spec](obs, self.m)
+        if not isinstance(self.spec, dict):
+            return BASELINES[self.spec](obs, self.m)
+        a = strategy.decide(obs, self.m, self.spec)
+        if self.log is not None:
+            agg, fold = opponent.rates(self.m, self.spec)
+            opp_hist = [h for h in obs.action_history if not h.is_me]
+            self.rows.append({
+                "opp": self.label, "hand": obs.hand_index, "street": obs.street.name,
+                "is_button": int(obs.is_button), "eq": round(self.m["eq"][1], 4), "pot": obs.pot,
+                "to_call": obs.to_call, "pot_odds": round(obs.to_call / (obs.pot + obs.to_call), 4),
+                "raises_this_street": obs.raises_this_street,
+                "opp_last": opp_hist[-1].action.name if opp_hist else "NONE",
+                "opp_raises_hand": sum(h.action.name.startswith("RAISE") for h in opp_hist),
+                "opp_agg": round(agg, 4), "opp_fold": round(fold, 4), "action": a.name})
+        return a
 
     def end(self, result):
         if isinstance(self.spec, dict):
             strategy.hand_end(result, self.m)
+            for r in self.rows:  # every decision gets the hand's outcome
+                r.update(net_bb=result.my_net / 2, showdown=int(result.went_to_showdown),
+                         won=int(result.winner == "me"))
+            if self.log is not None:
+                self.log.extend(self.rows)
+            self.rows = []
+
+
+HALF = 1000  # tournament half length: bots restart every HALF deals, so long runs = several real halves
 
 
 def play_half(seats, seed, deals):
-    for p in seats:
-        p.start(deals)
     nets = ([], [])
     for d in range(deals):
-        g = Game(make_deal(seed, d), button_for_deal(d), hand_index=d)
+        if d % HALF == 0:
+            for p in seats:
+                p.start(min(HALF, deals - d))
+        g = Game(make_deal(seed, d), button_for_deal(d), hand_index=d % HALF)
         while not g.is_terminal:
             g.apply(seats[g.to_act].act(g.observation(g.to_act)))
         for s in (0, 1):
@@ -57,9 +81,20 @@ def play_half(seats, seed, deals):
     return nets
 
 
-def match(a, b, deals=500, seed="selfplay", rng_seed=0):
-    """Return (mean bb/deal for a, ci_low, ci_high)."""
-    A, B = Player(a, rng_seed), Player(b, rng_seed + 1)
+def load_local(path):
+    """Training-only overrides (train/local/, git-ignored). Never read by agent.py."""
+    if not path:
+        return {}
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def match(a, b, deals=500, seed="selfplay", rng_seed=0, local=None, log=None, label=""):
+    """Return (mean bb/deal for a, ci_low, ci_high). `local` overrides apply to every strategy player.
+    `log` (a list) collects one row per decision of player a (training data)."""
+    if local:
+        a, b = ({**p, **local} if isinstance(p, dict) else p for p in (a, b))
+    A, B = Player(a, rng_seed, log, label), Player(b, rng_seed + 1)
     h1 = play_half((A, B), seed, deals)[0]
     h2 = play_half((B, A), seed, deals)[1]
     bb = [(x + y) / 2 for x, y in zip(h1, h2)]
@@ -74,7 +109,9 @@ if __name__ == "__main__":
     ap.add_argument("--params", default=os.path.join(strategy.HERE, "params.json"))
     ap.add_argument("--deals", type=int, default=500)
     ap.add_argument("--seed", default="selfplay")
+    ap.add_argument("--local", help="training-only overrides json (keep it in train/local/)")
     args = ap.parse_args()
     warmup()
     opp = strategy.load_params(args.opp) if args.opp.endswith(".json") else args.opp
-    print("bb/deal %.3f  CI [%.3f, %.3f]" % match(strategy.load_params(args.params), opp, args.deals, args.seed))
+    print("bb/deal %.3f  CI [%.3f, %.3f]" % match(strategy.load_params(args.params), opp, args.deals, args.seed,
+                                                    local=load_local(args.local)))

@@ -3,7 +3,6 @@
 Add an entry when context conflicts or a decision is unresolved. Remove it once the developer resolves it.
 
 - Submission deadline: the guide still shows a placeholder ("[[Date and time]]").
-- Time budget: the PDF says 2–4 ms per decision, the README says 4–7 ms. We plan for the stricter one.
 - Format of the real-life scenario data, to be confirmed against the `bot/scenarios.json` rule format.
 - Team work split: not decided yet.
 - Before submission: the repo must be public, Docker `tools/check_build.sh` must pass, and team registration must be done.

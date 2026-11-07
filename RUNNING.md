@@ -104,6 +104,18 @@ python train/selfplay.py --opp bot/params_old.json         # vs another saved pa
 ```
 Output: `bb/deal 11.556  CI [8.995, 14.118]` (our result, and its 95% interval).
 
+- **1 deal = 2 hands** (the same cards played twice with seats swapped). The bots restart every 1000 deals, like a real half, so `--deals 3000` = 3 real matches. Use ≥3000 for close comparisons.
+- **Harder test opponents** (our strategy code with other params): `--opp train/opps/adaptor.json`, `hyper_pass.json`, `hyper_agg.json`, `past_best.json` (the previous params; any new params should beat this).
+- Running many sims at once slows each one down and weakens the bot (less thinking time), so compare versions under the same load.
+
+### Training-only overrides (never committed)
+Settings that would break competition limits (e.g. `{"time_budget": 20}`) are allowed **for training only**. Put them in `train/local/` (git-ignored) and pass them with `--local`:
+```
+python train/selfplay.py --opp train/opps/adaptor.json --local train/local/my_override.json
+python train/tune.py --local train/local/my_override.json --seed 1 --out runs/1.json   # saved params exclude the override
+```
+`agent.py` never reads `train/local/`, and `python -m pytest -q` fails if `bot/params.json` breaks the hard limits.
+
 **Workflow for testing a change:**
 1. Copy `bot/params.json` to `bot/params_old.json`.
 2. Edit `bot/params.json`.

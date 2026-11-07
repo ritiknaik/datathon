@@ -19,3 +19,7 @@ bot/params_old.json
 .claude/
 .DS_Store
 Thumbs.db
+
+# Training-only overrides (may exceed competition limits) - never commit
+train/local/
+data/
