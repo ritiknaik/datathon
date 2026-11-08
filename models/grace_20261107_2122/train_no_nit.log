@@ -1,8 +1,34 @@
 Restoring modules from user's poker
-g012
+g017
 name, memory.total [MiB]
 NVIDIA A100-PCIE-40GB, 40960 MiB
-Traceback (most recent call last):
-  File "/scratch/user/rahin1301/datathon/train/train_q.py", line 41, in <module>
-    assert train_files and val_files, "need at least one training file and one holdout file"
-AssertionError: need at least one training file and one holdout file
+data files: 64, holdout files: 8
+train 17547645 rows from 56 files, holdout 2546848 rows, device cuda
+epoch 1: holdout loss 90.653 (baseline 115.935)  [14s]
+epoch 2: holdout loss 90.208 (baseline 115.935)  [15s]
+epoch 3: holdout loss 90.211 (baseline 115.935)  [17s]
+epoch 4: holdout loss 90.116 (baseline 115.935)  [18s]
+epoch 5: holdout loss 89.909 (baseline 115.935)  [19s]
+epoch 6: holdout loss 89.900 (baseline 115.935)  [20s]
+epoch 7: holdout loss 89.890 (baseline 115.935)  [21s]
+epoch 8: holdout loss 89.912 (baseline 115.935)  [22s]
+epoch 9: holdout loss 89.827 (baseline 115.935)  [23s]
+epoch 10: holdout loss 89.793 (baseline 115.935)  [25s]
+epoch 11: holdout loss 89.825 (baseline 115.935)  [26s]
+epoch 12: holdout loss 89.789 (baseline 115.935)  [27s]
+  holdout add1                   rows  104987  loss 54.213
+  holdout add2                   rows   91960  loss 86.435
+  holdout add3                   rows   67402  loss 47.271   <- never seen in training
+  holdout add4                   rows   69433  loss 98.909
+  holdout call                   rows  111940  loss 18.926
+  holdout half                   rows  144718  loss 164.213
+  holdout opps/adaptor           rows   98962  loss 84.609
+  holdout opps/hyper_agg         rows  110224  loss 152.046
+  holdout opps/hyper_pass        rows  105028  loss 31.879
+  holdout opps/past_best         rows   93391  loss 87.955
+  holdout pool/v1                rows  105183  loss 87.771
+  holdout pool/v2                rows   84619  loss 61.646
+  holdout pot                    rows  109199  loss 202.939
+  holdout random                 rows  105749  loss 124.874
+  holdout random_style           rows 1144053  loss 80.933
+saved /scratch/user/rahin1301/pokerdata/q_weights_no_nit.npz
