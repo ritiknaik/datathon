@@ -1,0 +1,43 @@
+Restoring modules from user's poker
+t001
+name, memory.total [MiB]
+Tesla T4, 16384 MiB
+data files: 64
+train 17980032 rows from 56 files, holdout 2546848 rows, device cuda
+epoch 1: holdout loss 90.152 (baseline 115.743)
+epoch 2: holdout loss 89.924 (baseline 115.743)
+epoch 3: holdout loss 89.858 (baseline 115.743)
+epoch 4: holdout loss 89.812 (baseline 115.743)
+epoch 5: holdout loss 89.708 (baseline 115.743)
+epoch 6: holdout loss 89.657 (baseline 115.743)
+epoch 7: holdout loss 89.684 (baseline 115.743)
+epoch 8: holdout loss 89.633 (baseline 115.743)
+epoch 9: holdout loss 89.559 (baseline 115.743)
+epoch 10: holdout loss 89.534 (baseline 115.743)
+epoch 11: holdout loss 89.570 (baseline 115.743)
+epoch 12: holdout loss 89.532 (baseline 115.743)
+epoch 13: holdout loss 89.462 (baseline 115.743)
+epoch 14: holdout loss 89.482 (baseline 115.743)
+epoch 15: holdout loss 89.454 (baseline 115.743)
+epoch 16: holdout loss 89.434 (baseline 115.743)
+epoch 17: holdout loss 89.425 (baseline 115.743)
+epoch 18: holdout loss 89.493 (baseline 115.743)
+epoch 19: holdout loss 89.427 (baseline 115.743)
+epoch 20: holdout loss 89.396 (baseline 115.743)
+  holdout add1                   rows  104987  loss 53.891
+  holdout add2                   rows   91960  loss 85.911
+  holdout add3                   rows   67402  loss 46.177
+  holdout add4                   rows   69433  loss 98.342
+  holdout call                   rows  111940  loss 18.874
+  holdout half                   rows  144718  loss 163.792
+  holdout opps/adaptor           rows   98962  loss 83.751
+  holdout opps/hyper_agg         rows  110224  loss 151.747
+  holdout opps/hyper_pass        rows  105028  loss 31.653
+  holdout opps/past_best         rows   93391  loss 87.417
+  holdout pool/v1                rows  105183  loss 87.277
+  holdout pool/v2                rows   84619  loss 61.436
+  holdout pot                    rows  109199  loss 202.455
+  holdout random                 rows  105749  loss 123.490
+  holdout random_style           rows 1144053  loss 80.690
+saved /scratch/user/rahin1301/pokerdata/q_weights.npz
+[2026-11-07T20:57:00.010] error: *** JOB 20430783 ON t001 CANCELLED AT 2026-11-07T20:57:00 DUE TO TIME LIMIT ***

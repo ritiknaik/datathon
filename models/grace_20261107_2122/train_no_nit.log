@@ -1,0 +1,8 @@
+Restoring modules from user's poker
+g012
+name, memory.total [MiB]
+NVIDIA A100-PCIE-40GB, 40960 MiB
+Traceback (most recent call last):
+  File "/scratch/user/rahin1301/datathon/train/train_q.py", line 41, in <module>
+    assert train_files and val_files, "need at least one training file and one holdout file"
+AssertionError: need at least one training file and one holdout file

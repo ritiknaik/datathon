@@ -9,6 +9,7 @@ Reports holdout loss per opponent so we can see whether it generalises (leave-on
 import argparse
 import glob
 import os
+import time
 
 import numpy as np
 import torch
@@ -42,7 +43,7 @@ if __name__ == "__main__":
     Xv, Av, Yv, Ov = load(val_files)
     mean, std = X.mean(0), X.std(0) + 1e-6
     dev = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"train {len(Y)} rows from {len(train_files)} files, holdout {len(Yv)} rows, device {dev}")
+    print(f"train {len(Y)} rows from {len(train_files)} files, holdout {len(Yv)} rows, device {dev}", flush=True)
 
     t = lambda z, dt=torch.float32: torch.tensor(z, dtype=dt, device=dev)  # noqa: E731
     X, A, Y = t((X - mean) / std), t(A, torch.long), t(Y)
@@ -56,6 +57,7 @@ if __name__ == "__main__":
         with torch.no_grad():
             return loss_fn(net(x).gather(1, act[:, None])[:, 0], y)
 
+    t0 = time.time()
     for ep in range(a.epochs):
         net.train()
         perm = torch.randperm(len(Y), device=dev)
@@ -65,7 +67,8 @@ if __name__ == "__main__":
             opt.zero_grad(); loss.backward(); opt.step()
         net.eval()
         base = loss_fn(torch.full_like(Yv, float(Y.mean())), Yv).mean().item()  # predict-the-average baseline
-        print(f"epoch {ep + 1}: holdout loss {evaluate(Xv, Av, Yv).mean().item():.3f} (baseline {base:.3f})", flush=True)
+        print(f"epoch {ep + 1}: holdout loss {evaluate(Xv, Av, Yv).mean().item():.3f} (baseline {base:.3f})"
+              f"  [{time.time() - t0:.0f}s]", flush=True)
 
     per = evaluate(Xv, Av, Yv).cpu().numpy()
     for name in sorted(set(Ov)):
