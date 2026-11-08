@@ -18,7 +18,7 @@ sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "baseline-bots"))
 from evaluator import warmup  # noqa: E402
 from game import Action, Game, button_for_deal, make_deal  # noqa: E402
-from bot import opponent, strategy  # noqa: E402
+from bot import features, opponent, strategy  # noqa: E402
 import opponents  # noqa: E402  (baseline-add-1..4: add1 | add2 | add3 | add4)
 
 BASELINES = {
@@ -32,20 +32,30 @@ HAND_END = {k: end for k, (_, end) in opponents.STYLES.items() if end}
 
 
 class Player:
-    def __init__(self, spec, rng_seed, log=None, label=""):
+    def __init__(self, spec, rng_seed, log=None, label="", qlog=None, explore=0.0):
         self.spec, self.rng_seed = spec, rng_seed
         self.log, self.label, self.rows = log, label, []  # log: list collecting one row per decision (training only)
+        self.qlog, self.qrows, self.explore = qlog, [], explore  # Q-net training data + exploration (training only)
+        self.xrng = random.Random(rng_seed + 7919)
 
     def start(self, deals):
         self.m = {}
         if isinstance(self.spec, dict):
             strategy.new_half(deals, self.m)
         self.m["rng"] = random.Random(self.rng_seed)
+        self.m["log_features"] = self.qlog is not None
 
     def act(self, obs):
         if not isinstance(self.spec, dict):
             return BASELINES[self.spec](obs, self.m)
         a = strategy.decide(obs, self.m, self.spec)
+        explored = 0
+        if self.explore and self.xrng.random() < self.explore:  # training only: try a random legal action
+            a, explored = self.xrng.choice(obs.legal_actions), 1
+            opponent.mark_action(a, self.m)
+        if self.qlog is not None:  # target (bb from now) is filled in at hand end
+            self.qrows.append((self.m["feat"], features.ACTIONS.index(a), features.legal_mask(obs),
+                               80 - obs.my_stack, explored))
         if self.log is not None:
             agg, fold = opponent.rates(self.m, self.spec)
             opp_hist = [h for h in obs.action_history if not h.is_me]
@@ -68,6 +78,9 @@ class Player:
             if self.log is not None:
                 self.log.extend(self.rows)
             self.rows = []
+            for f, ai, mask, put_in, ex in self.qrows:  # chips from this decision on = net + chips already in
+                self.qlog.append((f, ai, mask, (result.my_net + put_in) / 2, ex))
+            self.qrows = []
         elif self.spec in HAND_END:
             HAND_END[self.spec](result, self.m)
 
@@ -98,12 +111,12 @@ def load_local(path):
         return json.load(f)
 
 
-def match(a, b, deals=500, seed="selfplay", rng_seed=0, local=None, log=None, label=""):
+def match(a, b, deals=500, seed="selfplay", rng_seed=0, local=None, log=None, label="", qlog=None, explore=0.0):
     """Return (mean bb/deal for a, ci_low, ci_high). `local` overrides apply to every strategy player.
     `log` (a list) collects one row per decision of player a (training data)."""
     if local:
         a, b = ({**p, **local} if isinstance(p, dict) else p for p in (a, b))
-    A, B = Player(a, rng_seed, log, label), Player(b, rng_seed + 1)
+    A, B = Player(a, rng_seed, log, label, qlog, explore), Player(b, rng_seed + 1)
     h1 = play_half((A, B), seed, deals)[0]
     h2 = play_half((B, A), seed, deals)[1]
     bb = [(x + y) / 2 for x, y in zip(h1, h2)]

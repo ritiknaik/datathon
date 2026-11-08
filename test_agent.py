@@ -283,3 +283,25 @@ def test_stronger_baselines_always_return_a_legal_action():
                 game.apply(a)
             if end:
                 end(game.hand_result(0), mem)
+
+
+def test_qnet_is_used_when_loaded_and_never_breaks_play(bot):
+    import numpy as np
+    from bot import features, qnet, strategy
+    obs = Game(make_deal(2, 0), 0).observation(0)
+    n = len(features.build(obs, 0.5, 0.3, 0.3, 10))
+    good = {"mean": np.zeros(n, np.float32), "std": np.ones(n, np.float32),
+            "W0": np.zeros((n, 4), np.float32), "b0": np.array([0, 50, -50, -50], np.float32)}  # "always call"
+    P = {**strategy.load_params(), "qnet_weight": 1.0, "temperature": 0.001}
+    old = qnet._W, qnet.LOADED
+    try:
+        for weights in (good, {"W0": np.zeros((3, 4))}):  # working net, then a broken one (shape mismatch)
+            qnet._W, qnet.LOADED = weights, True
+            mem = {}
+            strategy.new_half(10, mem)
+            a = strategy.decide(obs, mem, P)
+            assert a in obs.legal_actions
+            if weights is good:
+                assert a == Action.CHECK_CALL
+    finally:
+        qnet._W, qnet.LOADED = old

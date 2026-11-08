@@ -12,7 +12,7 @@ import time
 from evaluator import cards_to_str
 from game import RAISE_ACTIONS, Action, Street
 
-from . import opponent
+from . import features, opponent, qnet
 from .equity import mc_equity, preflop_equity, warmup_np
 
 try:  # optional: numpy-only learned equity model exported from Databricks (bot/equity_model.py, predict(hole, board))
@@ -85,6 +85,9 @@ def decide(obs, memory: dict, P: dict) -> Action:
     opponent.observe(obs, memory)
     eq = _equity(obs, memory, P)
     agg, fold = opponent.rates(memory, P)
+    use_net = qnet.LOADED and P.get("qnet_weight", 0) > 0
+    if use_net or memory.get("log_features"):  # training code sets log_features; live play only if the net is on
+        memory["feat"] = features.build(obs, eq, agg, fold, memory["opp"]["acts"])
     if obs.to_call > 0:  # a bet from a passive opponent means more than one from a maniac
         eq = max(0.0, eq - P["bet_discount"] * (1 - agg))
 
@@ -99,6 +102,14 @@ def decide(obs, memory: dict, P: dict) -> Action:
             opp_add = min(obs.raise_to[a] - obs.opp_bet, obs.opp_stack)
             add = min(obs.raise_to[a] - obs.my_bet, tc + opp_add)
             ev[a] = fe * pot + (1 - fe) * (eq_called * (pot + add + opp_add) - add)
+    if use_net:  # blend the learned chips-from-now with the formula; any failure keeps the formula
+        try:
+            q, w = qnet.predict(memory["feat"]), P["qnet_weight"]
+            for i, a in enumerate(features.ACTIONS):
+                if a in ev and a != Action.FOLD:  # folding is exactly 0 from now
+                    ev[a] = (1 - w) * ev[a] + w * q[i] * obs.big_blind
+        except Exception:
+            pass
 
     probs = _scenario(obs, eq, P)
     from_scenario = probs is not None

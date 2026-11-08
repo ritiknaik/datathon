@@ -33,6 +33,7 @@ Last updated: 2026-11-07 (merge of r-poc into spoc: v2 params kept, numpy equity
 - Watch tools (off by default): judge `--verbose`; `BOT_TRACE=1` prints equity/EV/mix per decision.
 - Audit findings (24k hands vs the 4 starter baselines; immediate pot odds only, so upper bounds): we fold too many hands worth calling, mostly vs always_pot and always_half. Lowering `bet_discount` hurt vs the stronger bots, so that is not the fix.
 - How to run everything: `RUNNING.md`.
+- **Branch `spoc_db` (work in progress): learned action-value net.** `bot/features.py` (39 inputs, shared by bot and training), `bot/qnet.py` (numpy inference ~14 µs; missing/broken `bot/q_weights.npz` = plays exactly like v2), blended into the EV via `qnet_weight` (0 = off, the default). Training only: exploration + per-decision "bb from now" logging in `train/selfplay.py`, `train/gen_q.py` (pool + random-style opponents, one .npz per run), `train/train_q.py` (PyTorch, holdout file, per-opponent loss, `--exclude` for leave-one-opponent-out), `train/grace_gen.slurm` and `train/grace_train.slurm` (HPRC QuickStart format; `module restore poker`, venv in `$SCRATCH/pokervenv`, data in `$SCRATCH/pokerdata`). Ship a net only after `compare.py` ACCEPTs it vs v2 and an HTTP judge check on fresh servers.
 
 ## Key decisions
 - Keep the plumbing in `agent.py` unchanged. Strategy code lives in `bot/`.
