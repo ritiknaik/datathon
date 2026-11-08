@@ -1,5 +1,7 @@
 # Handoff: the blended Q-net bot ("v2 + adaptive net")
 
+**Status (2026-11-07): SHIPPED on `spoc_db`.** `bot/params.json` = the blended params and `bot/q_weights.npz` = the net, both committed. The previous bot is kept as `bot/pool/v2.json`; this one as `bot/pool/qnet1.json`.
+
 **Audience:** a coding agent (or developer) on another branch who must (1) rebuild this exact bot from branch `spoc_db` and (2) compare it fairly against their own model.
 **Read first:** `CLAUDE.md` and every file in `context/` (team rule). Follow the hard limits there.
 
@@ -26,7 +28,7 @@ w     = qnet_weight * clip((qnet_agg_hi - agg) / (qnet_agg_hi - qnet_agg_lo), 0,
 | `models/grace_20261107_2122/q_weights.npz` | **The trained net** (39 → 128 → 128 → 4, ReLU) |
 | `models/grace_20261107_2122/params_adaptive.json` | **The blended model's params** = v2 + `qnet_weight 0.5, qnet_agg_lo 0.75, qnet_agg_hi 0.95` |
 | `models/grace_20261107_2122/train.log`, `data.log`, `summary.txt` | Training and data evidence |
-| `bot/params.json` | v2 (the currently shipped bot). The net is **off** here (no `qnet_weight`) |
+| `bot/params.json` | **The shipped bot = blended model** (same content as `params_adaptive.json`). The previous v2 is `bot/pool/v2.json` |
 | `train/compare.py` | Acceptance test: candidates vs the 14-opponent pool on fresh seeds, plus head-to-head vs the first file |
 | `train/selfplay.py` | Fast in-process duplicate match (no HTTP) |
 | `train/gen_q.py`, `train/train_q.py`, `train/grace_*.slurm` | How the net was made (section 6) |
@@ -36,14 +38,14 @@ w     = qnet_weight * clip((qnet_agg_hi - agg) / (qnet_agg_hi - qnet_agg_lo), 0,
 ```bash
 git fetch origin && git checkout spoc_db && git pull origin spoc_db
 python -m pip install -r requirements-dev.txt          # numpy, fastapi, uvicorn, pytest, httpx
-cp models/grace_20261107_2122/q_weights.npz bot/q_weights.npz      # LOCAL ONLY, do not commit (see section 8)
+# bot/q_weights.npz and bot/params.json are already the blended model on spoc_db (nothing to copy)
 python -c "from bot import qnet; print('net loaded:', qnet.LOADED)"  # must print True
 python -m pytest -q                                     # all tests pass (21 at the time of writing)
 ```
 
 Use it:
-- **In-process** (simulator, `compare.py`): pass `models/grace_20261107_2122/params_adaptive.json` as the params file.
-- **As an HTTP bot** (judge): `agent.py` always reads `bot/params.json`. Use a **separate worktree** (section 5B) and copy `params_adaptive.json` over `bot/params.json` **there only**.
+- **In-process** (simulator, `compare.py`): `bot/params.json` (or `models/grace_20261107_2122/params_adaptive.json`, identical).
+- **As an HTTP bot** (judge): `python agent.py` on `spoc_db` is the blended bot. For a side-by-side run with another branch, use a **separate worktree** (section 5B).
 
 Sanity check (should reproduce within noise):
 ```bash
@@ -72,7 +74,8 @@ python train/selfplay.py --params models/grace_20261107_2122/params_adaptive.jso
 
 - Blended vs plain net directly (3000 deals): +0.17 [−0.39, +0.73], a tie.
 - Noise level: about ±0.6 bb/deal per cell. For example, vs add4 the two net versions play identically (add4 never reaches the fade), yet differ by 0.66.
-- **Not yet done:** HTTP-judge verification of the blended bot (wins/chops, errors, time bank). Do this before shipping (section 5B).
+- **HTTP judge (fresh servers, seeds 31 and 32, 1000 deals each): 16/16 wins, 0 errors, thinking ≤ 3.6 s of 8 s per half.** random +8.6/+9.7, always_pot +5.9/+6.2, calling_station +11.1/+11.2, always_half +11.8/+11.5, add1 +2.7/+2.9, add2 +2.1/+2.1, **add3 Nit +1.9/+0.7**, add4 +2.3/+2.2. (v2 on seeds 21/23: 14 wins + 2 chops vs the Nit.)
+- Generalisation: a net trained **without** the Nit (`q_weights_no_nit.npz`) beats it as well as the full net (+1.05 vs +1.01; v2 +0.36, 3000 deals).
 
 ## 5. How to compare it with YOUR model
 
@@ -96,8 +99,7 @@ Compare as real bots over HTTP, exactly like the tournament. Run the blended bot
 
 ```bash
 git worktree add ../blended spoc_db
-cp models/grace_20261107_2122/q_weights.npz              ../blended/bot/q_weights.npz
-cp models/grace_20261107_2122/params_adaptive.json       ../blended/bot/params.json
+# spoc_db already ships the blended bot: nothing to copy
 ```
 Start servers, each in its own terminal (Mac/Linux shown; on Windows PowerShell use `$env:PORT=5008; python agent.py`):
 ```bash
@@ -137,7 +139,7 @@ A version replaces the shipped bot only if, on **fresh seeds**:
 Tournament scoring is win 1 / chop 0.5 / loss 0, decided by whether the 95% CI of bb/deal is entirely above or below 0. **A tie beats a loss; margins only break ties.**
 
 ## 8. Rules while working on this
-- **Do not commit `bot/q_weights.npz`** or change `bot/params.json` on a shared branch until the model is accepted (section 7). The shipped bot must stay v2 until then.
+- Don't replace `bot/q_weights.npz` or `bot/params.json` with a new model until it passes section 7 against **this** bot (`bot/pool/qnet1.json` + current weights).
 - **Never `git push --force`.** It overwrote 4 commits on `spoc_db` once. If a push is rejected: `git pull origin <branch>`, then push.
 - Training-only settings that break competition limits go in `train/local/` (git-ignored) via `--local`; never ship them.
 - Update `context/notes.md` in the same push as any code or result change (team rule).

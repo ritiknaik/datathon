@@ -25,5 +25,8 @@
   },
   "prior_weight": 20,
   "agg_prior": 0.4448,
-  "fold_prior": 0.1664
+  "fold_prior": 0.1664,
+  "qnet_weight": 0.5,
+  "qnet_agg_lo": 0.75,
+  "qnet_agg_hi": 0.95
 }
