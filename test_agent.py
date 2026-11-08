@@ -305,3 +305,13 @@ def test_qnet_is_used_when_loaded_and_never_breaks_play(bot):
                 assert a == Action.CHECK_CALL
     finally:
         qnet._W, qnet.LOADED = old
+
+
+def test_net_weight_fades_against_very_aggressive_opponents():
+    from bot.strategy import net_weight
+    P = {"qnet_weight": 0.5, "qnet_agg_lo": 0.75, "qnet_agg_hi": 0.95}
+    assert net_weight(P, 0.3) == 0.5 and net_weight(P, 0.75) == 0.5
+    assert abs(net_weight(P, 0.85) - 0.25) < 1e-9
+    assert net_weight(P, 0.95) == 0.0 and net_weight(P, 1.0) == 0.0
+    assert net_weight({"qnet_weight": 0.5}, 0.99) == 0.5  # no thresholds = constant weight (old behaviour)
+    assert net_weight({}, 0.5) == 0

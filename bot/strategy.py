@@ -80,6 +80,15 @@ def _scenario(obs, eq: float, P: dict) -> dict | None:
     return None
 
 
+def net_weight(P: dict, agg: float) -> float:
+    """Share of the learned net in the EV. Optional fade-out vs very aggressive opponents (raise rate agg):
+    full weight up to qnet_agg_lo, linearly down to 0 at qnet_agg_hi. Without those keys: constant."""
+    w, lo, hi = P.get("qnet_weight", 0), P.get("qnet_agg_lo"), P.get("qnet_agg_hi")
+    if lo is None or hi is None or hi <= lo:
+        return w
+    return w * min(1.0, max(0.0, (hi - agg) / (hi - lo)))
+
+
 def decide(obs, memory: dict, P: dict) -> Action:
     t0 = time.perf_counter()
     opponent.observe(obs, memory)
@@ -102,9 +111,10 @@ def decide(obs, memory: dict, P: dict) -> Action:
             opp_add = min(obs.raise_to[a] - obs.opp_bet, obs.opp_stack)
             add = min(obs.raise_to[a] - obs.my_bet, tc + opp_add)
             ev[a] = fe * pot + (1 - fe) * (eq_called * (pot + add + opp_add) - add)
-    if use_net:  # blend the learned chips-from-now with the formula; any failure keeps the formula
+    w = net_weight(P, agg)
+    if use_net and w > 0:  # blend the learned chips-from-now with the formula; any failure keeps the formula
         try:
-            q, w = qnet.predict(memory["feat"]), P["qnet_weight"]
+            q = qnet.predict(memory["feat"])
             for i, a in enumerate(features.ACTIONS):
                 if a in ev and a != Action.FOLD:  # folding is exactly 0 from now
                     ev[a] = (1 - w) * ev[a] + w * q[i] * obs.big_blind
