@@ -7,12 +7,12 @@
 set -e
 D=$SCRATCH/pokerdata
 cd $SCRATCH/datathon
-ls $D/q_weights.npz $D/q_weights_no_nit.npz >/dev/null || { echo "weights missing: is grace_job finished?"; exit 1; }
+ls $D/q_weights.npz >/dev/null || { echo "weights missing: is grace_job finished?"; exit 1; }
 [ -n "$(git config user.email)" ] || { echo 'first run: git config user.name "Your Name" && git config user.email "you@tamu.edu"'; exit 1; }
 
 RUN=models/grace_$(date +%Y%m%d_%H%M)
 mkdir -p $RUN
-cp $D/q_weights.npz $D/q_weights_no_nit.npz $RUN/
+cp $D/q_weights*.npz $RUN/                     # the no-Nit model is copied only if it exists
 cp "$(ls -t $D/logs/grace_job.*.out | head -1)" $RUN/train.log
 grep -h saved $D/logs/gen.*.out > $RUN/data.log || true
 echo "rows: $(awk '{s+=$2} END {print s}' $RUN/data.log)  files: $(wc -l < $RUN/data.log)" | tee $RUN/summary.txt
