@@ -10,4 +10,4 @@ Add an entry when context conflicts or a decision is unresolved. Remove it once 
 - Grace: confirm the account, and the Python 3.10+ module name for `train/grace.slurm`.
 - numpy at runtime: the bot now imports numpy (in the base image per the README). Confirm with `tools/check_build.sh` once Docker is running.
 - Tuning trade-off: v3 is tuned for the worst of the pool (strong baselines); it earns less vs random than v1 did. Decide what we expect the tournament field to look like.
-- Before making the repo public: `databricks/equity_model_pipeline.ipynb` contains a Databricks username/email path (ritiknaik23@tamu.edu) in its outputs. Strip it or remove the notebook if that is not wanted.
+- Before making the repo public: done. The Databricks notebooks use a `<your-databricks-user>` placeholder and contain no email (older commits in git history still do).
