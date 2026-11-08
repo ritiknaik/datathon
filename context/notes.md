@@ -1,6 +1,6 @@
 # Notes (shared hackathon context)
 
-Last updated: 2026-11-07 (branch ml-ensemble: Databricks policy ensemble round 1 merged)
+Last updated: 2026-11-08 (branch league: v3 + spoc_db Q-net + ensemble correction; strongest bot so far)
 
 ## Problem statement
 - TAMU Datathon Poker Bot Challenge: Heads-Up Short Deck (36 cards) 5-card Pot-Limit Omaha.
@@ -38,10 +38,5 @@ Last updated: 2026-11-07 (branch ml-ensemble: Databricks policy ensemble round 1
 - **Branches:** `r-poc` = rule-based bot v3 (backup, also tag `rule-based-v3`, Docker check passed). `ml-ensemble` = rule-based v3 + learned decision ensemble (plan and results in `databricks/ENSEMBLE_PLAN.md`). `spoc` = teammate bot (v2 params + throttle floor). Over 50 HTTP matches, `r-poc` vs `spoc` was 18 wins / 32 chops / 0 losses, pooled +0.73 [+0.58, +0.87] bb/deal.
 - **ml-ensemble bot:** score = rule EV + `policy_w` × ensemble advantage (ridge + 5 bagged MLPs on 30 features (Databricks round 1: 205k replay-labelled decisions, `databricks/policy_ensemble.ipynb`, MLflow `poker_policy_ensemble`) from `bot/policy_features.py`; weights `bot/policy_weights.npz`). Labels come from replaying each sampled decision with every action forced (`train/policy_data.py`); training is in `train/policy_train.py`. Opt-in via `use_policy_model` / `policy_w` (1.0); any model error falls back to the rules. `sample_cost` is 2e-5, so equity always uses 60 samples (training/match consistency).
 - **ml-ensemble results (Databricks round 1 weights):** compare.py ACCEPT vs rules-only +1.17 [+0.81, +1.54] (Phase 0 weights: +0.60). Over HTTP (10 matches each): vs the rule-based backup 9 wins / 1 chop / 0 losses, pooled +1.39 [+1.10, +1.68]; vs `spoc` 10 wins / 0 losses, pooled +1.49. 0 errors, thinking ≤ 2.3 s per half. Unseen styles (`spoc`'s train/opps, 8 seeds): better than Phase 0 weights on all three, but rules-only still beats it vs hyper_agg and hyper_pass (hyper_pass worst-seed CI ≈ 0). Next: round 2 with more passive opponents; try policy_w 2. Not Docker-checked on this branch yet. Notebooks use a `<your-databricks-user>` placeholder (no personal email).
-
-## Key decisions
-- Keep the plumbing in `agent.py` unchanged. Strategy code lives in `bot/`.
-- `time_budget` is 4.0 s. The judge also counts ~1.5 s per half of request overhead, which the bot's own timer can't see, so the total is ≈5.5 of 8 s.
-- `train/tune.py` scores every candidate on the same deals against the whole pool. Accept a winner only if `train/compare.py` says ACCEPT on fresh seeds, then copy it to `bot/pool/vN.json`.
-- Use `127.0.0.1`, not `localhost`, for judge URLs (the judge failed to reach the bots through `localhost` on Windows).
-- numpy is now also used by the bot at runtime (`bot/equity.py`). The tournament base image already has it and `requirements.txt` is unchanged; there is a pure-Python fallback. Confirm with `tools/check_build.sh`.
+- **league bot (branch `league`, best so far):** v3 rules + `spoc_db`'s Q-net (copied read-only into `bot/qnet.py`, `bot/q_features.py`, `bot/q_weights.npz`; exact parity with spoc_db's bot) at `qnet_weight` 0.85 with its fade (`qnet_agg_lo` 0.75 / `hi` 0.95) + the ensemble correction at `policy_w` 0.5. `bot/pool/qnet1.json` = spoc_db's bot as a pool member (`mc_floor` 1 reproduces its sample floor). In-process vs qnet1: +0.40 [+0.02, +0.78] ACCEPT, then +0.24 on 8 more seeds; pool mean 4.4 → 5.3–5.5. HTTP (judge, fresh servers, 1 thread): vs `spoc_db` 2 wins / 48 chops / 0 losses, pooled +0.25 [+0.10, +0.39], ahead on chips in 34 of 50; vs `ml-ensemble` 25/25 wins (+1.91); vs `r-poc` 25/25 wins (+2.34). 0 errors, thinking ≤ 3.4 s per half. For comparison `ml-ensemble` vs `spoc_db`: 0 wins / 41 chops / 9 losses (−0.50).
+- **Tournament format:** the guide says round robin (points, tie-break = average bb/deal); the team has heard it is a knockout. How a chopped knockout match is settled is unconfirmed (ask the organisers). Equal-strength bots chop almost every match.
