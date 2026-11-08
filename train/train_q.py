@@ -38,7 +38,7 @@ if __name__ == "__main__":
     files = sorted(os.path.abspath(f) for f in glob.glob(a.data))
     val_files = [os.path.abspath(f) for f in a.val] if a.val else files[-1:]
     train_files = [f for f in files if f not in val_files]  # holdout never leaks into training
-    assert train_files and val_files, "need at least one training file and one holdout file"
+    assert train_files and val_files, f"no data: --data {a.data!r} matched {len(files)} files, --val {a.val!r}"
     X, A, Y, _ = load(train_files, a.exclude)
     Xv, Av, Yv, Ov = load(val_files)
     mean, std = X.mean(0), X.std(0) + 1e-6

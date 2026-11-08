@@ -11,6 +11,7 @@ out.json
 h1.json
 h2.json
 *.log
+!models/**/*.log
 bot/params_old.json
 
 # Editor / OS / agent
