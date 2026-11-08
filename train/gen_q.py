@@ -47,7 +47,8 @@ if __name__ == "__main__":
     ap.add_argument("--params", default=os.path.join(strategy.HERE, "params.json"))
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--workers", type=int, default=int(os.environ.get("SLURM_CPUS_PER_TASK", os.cpu_count())))
-    ap.add_argument("--out", default="data/q/part0.npz")
+    ap.add_argument("--out", default="data/q/part0.npz", help="written as part0_000.npz, part0_001.npz, ...")
+    ap.add_argument("--chunk", type=int, default=60, help="save every N finished matches (a crash loses at most one chunk)")
     a = ap.parse_args()
     rng = random.Random(a.seed)
     base = strategy.load_params(a.params)
@@ -56,14 +57,21 @@ if __name__ == "__main__":
     for i in range(a.matches):
         name, opp = ("random_style", random_style(base, rng)) if rng.random() < a.random_share else pool[i % len(pool)]
         jobs.append((name, opp, base, a.deals, f"q{a.seed}-{i}", a.explore))
-    names, parts = [], []
+    names, parts, k = [], [], 0
+    os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
+
+    def save():
+        X, A, M, Y, E, O = (np.concatenate(c) for c in zip(*parts))
+        path = a.out.replace(".npz", f"_{k:03d}.npz")
+        np.savez_compressed(path, X=X, A=A, M=M, Y=Y, E=E, O=O, names=np.array(names))
+        print(f"saved {len(Y)} rows, {X.shape[1]} features -> {path}", flush=True)
+
     with ProcessPoolExecutor(a.workers) as ex:
-        for name, arrs in ex.map(run, jobs):
+        for i, (name, arrs) in enumerate(ex.map(run, jobs), 1):
             if name not in names:
                 names.append(name)
             parts.append(arrs + (np.full(len(arrs[3]), names.index(name), np.int16),))
-            print(f"{name}: {len(arrs[3])} rows", flush=True)
-    X, A, M, Y, E, O = (np.concatenate(c) for c in zip(*parts))
-    os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
-    np.savez_compressed(a.out, X=X, A=A, M=M, Y=Y, E=E, O=O, names=np.array(names))
-    print(f"saved {len(Y)} rows, {X.shape[1]} features -> {a.out}")
+            print(f"[{i}/{len(jobs)}] {name}: {len(arrs[3])} rows", flush=True)
+            if len(parts) == a.chunk or i == len(jobs):
+                save()
+                parts, k = [], k + 1

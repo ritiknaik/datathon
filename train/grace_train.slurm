@@ -18,6 +18,6 @@ source $SCRATCH/pokervenv/bin/activate
 cd $SCRATCH/datathon
 nvidia-smi --query-gpu=name,memory.total --format=csv
 D=$SCRATCH/pokerdata
-python train/train_q.py --data "$D/q/*.npz" --val $D/q/part7.npz --hidden 128 --epochs 20 --out $D/q_weights.npz
-python train/train_q.py --data "$D/q/*.npz" --val $D/q/part7.npz --hidden 128 --epochs 20 --exclude add3 \
+python train/train_q.py --data "$D/q/*.npz" --val $D/q/part7_*.npz --hidden 128 --epochs 20 --out $D/q_weights.npz
+python train/train_q.py --data "$D/q/*.npz" --val $D/q/part7_*.npz --hidden 128 --epochs 20 --exclude add3 \
     --out $D/q_weights_no_nit.npz

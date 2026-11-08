@@ -8,6 +8,7 @@ Reports holdout loss per opponent so we can see whether it generalises (leave-on
 """
 import argparse
 import glob
+import os
 
 import numpy as np
 import torch
@@ -33,9 +34,10 @@ if __name__ == "__main__":
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--out", default="bot/q_weights.npz")
     a = ap.parse_args()
-    files = sorted(glob.glob(a.data))
-    val_files = a.val or files[-1:]
-    train_files = [f for f in files if f not in val_files]
+    files = sorted(os.path.abspath(f) for f in glob.glob(a.data))
+    val_files = [os.path.abspath(f) for f in a.val] if a.val else files[-1:]
+    train_files = [f for f in files if f not in val_files]  # holdout never leaks into training
+    assert train_files and val_files, "need at least one training file and one holdout file"
     X, A, Y, _ = load(train_files, a.exclude)
     Xv, Av, Yv, Ov = load(val_files)
     mean, std = X.mean(0), X.std(0) + 1e-6
