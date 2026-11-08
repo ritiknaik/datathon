@@ -146,12 +146,12 @@ Estimate: Phase 0 is about 2-3 hours including code. Each Databricks round is ab
 
 ## 8. Genie prompts (run in order, one at a time; stop after each and check the result)
 
-Before G1, Phase 0 must be done and pushed to `r-poc`. In Databricks, pull the Git folder to the latest `r-poc`.
+Before G1, Phase 0 is done and pushed to `ml-ensemble`. In Databricks, pull the Git folder to the latest `ml-ensemble` (not `r-poc`, which is the rule-based backup without the policy code).
 
 **G0: setup check**
 ```
 This repo is a heads-up Short Deck 5-card Pot-Limit Omaha poker bot. Read CLAUDE.md, context/notes.md
-and databricks/ENSEMBLE_PLAN.md first. Pull the Git folder to the latest r-poc. Add the repo root and
+and databricks/ENSEMBLE_PLAN.md first. Pull the Git folder to the latest ml-ensemble. Add the repo root and
 baseline-bots/ to sys.path, call evaluator.warmup(), and run
 train.selfplay.match(strategy.load_params(), "add3", 100, "check"). Then import train.policy_data
 and run its small self-test (policy_data.selftest()). Report compute type, available cores, and how long

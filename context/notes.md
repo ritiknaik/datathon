@@ -1,6 +1,6 @@
 # Notes (shared hackathon context)
 
-Last updated: 2026-11-07 (branch ml-ensemble: learned decision ensemble, Phase 0 GO)
+Last updated: 2026-11-07 (branch ml-ensemble: Databricks policy ensemble round 1 merged)
 
 ## Problem statement
 - TAMU Datathon Poker Bot Challenge: Heads-Up Short Deck (36 cards) 5-card Pot-Limit Omaha.
@@ -36,8 +36,8 @@ Last updated: 2026-11-07 (branch ml-ensemble: learned decision ensemble, Phase 0
 - Not done yet: more tuning rounds (accept only via `train/compare.py`), `scenarios.json` rules, Docker build check (Docker CLI + Colima installed locally, daemon not started).
 
 - **Branches:** `r-poc` = rule-based bot v3 (backup, also tag `rule-based-v3`, Docker check passed). `ml-ensemble` = rule-based v3 + learned decision ensemble (plan and results in `databricks/ENSEMBLE_PLAN.md`). `spoc` = teammate bot (v2 params + throttle floor). Over 50 HTTP matches, `r-poc` vs `spoc` was 18 wins / 32 chops / 0 losses, pooled +0.73 [+0.58, +0.87] bb/deal.
-- **ml-ensemble bot:** score = rule EV + `policy_w` × ensemble advantage (ridge + 3 bagged MLPs on 30 features from `bot/policy_features.py`; weights `bot/policy_weights.npz`). Labels come from replaying each sampled decision with every action forced (`train/policy_data.py`); training is in `train/policy_train.py`. Opt-in via `use_policy_model` / `policy_w` (1.0); any model error falls back to the rules. `sample_cost` is 2e-5, so equity always uses 60 samples (training/match consistency).
-- **ml-ensemble results:** compare.py ACCEPT twice (+0.60, +0.55 bb/deal vs v3). Over HTTP: vs the rule-based backup 3 wins / 17 chops / 0 losses, pooled +0.41 [+0.22, +0.59]; vs `spoc` 14 wins / 6 chops / 0 losses, pooled +0.83. Against unseen styles (`spoc`'s train/opps) it is about even: better vs adaptive, worse vs passive. Next: Databricks rounds with more varied opponents. Not Docker-checked on this branch yet.
+- **ml-ensemble bot:** score = rule EV + `policy_w` × ensemble advantage (ridge + 5 bagged MLPs on 30 features (Databricks round 1: 205k replay-labelled decisions, `databricks/policy_ensemble.ipynb`, MLflow `poker_policy_ensemble`) from `bot/policy_features.py`; weights `bot/policy_weights.npz`). Labels come from replaying each sampled decision with every action forced (`train/policy_data.py`); training is in `train/policy_train.py`. Opt-in via `use_policy_model` / `policy_w` (1.0); any model error falls back to the rules. `sample_cost` is 2e-5, so equity always uses 60 samples (training/match consistency).
+- **ml-ensemble results (Databricks round 1 weights):** compare.py ACCEPT vs rules-only +1.17 [+0.81, +1.54] (Phase 0 weights: +0.60). Over HTTP (10 matches each): vs the rule-based backup 9 wins / 1 chop / 0 losses, pooled +1.39 [+1.10, +1.68]; vs `spoc` 10 wins / 0 losses, pooled +1.49. 0 errors, thinking ≤ 2.3 s per half. Unseen styles (`spoc`'s train/opps, 8 seeds): better than Phase 0 weights on all three, but rules-only still beats it vs hyper_agg and hyper_pass (hyper_pass worst-seed CI ≈ 0). Next: round 2 with more passive opponents; try policy_w 2. Not Docker-checked on this branch yet. Notebooks use a `<your-databricks-user>` placeholder (no personal email).
 
 ## Key decisions
 - Keep the plumbing in `agent.py` unchanged. Strategy code lives in `bot/`.
