@@ -4,3 +4,4 @@ train
 runs
 context
 **/__pycache__
+data

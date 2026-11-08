@@ -41,6 +41,11 @@ python baseline-bots/baseline_random.py
 python baseline-bots/baseline_always_pot.py
 python baseline-bots/baseline_always_half.py
 python baseline-bots/baseline_calling_station.py
+# stronger opponents that look at their cards (see baseline-bots/opponents.py):
+python baseline-bots/baseline-add-1.py     # ValueBettor: solid, never bluffs
+python baseline-bots/baseline-add-2.py     # Maniac: raises pot ~45% of the time
+python baseline-bots/baseline-add-3.py     # Nit: only plays strong hands, folds a lot
+python baseline-bots/baseline-add-4.py     # Adaptive: bluffs more if we fold a lot
 
 # Terminal 3: the judge
 python judge_engine.py --agent1 http://127.0.0.1:5008 --agent2 http://127.0.0.1:5009 --seed 7
@@ -54,6 +59,32 @@ python judge_engine.py --agent1 http://127.0.0.1:5008 --agent2 http://127.0.0.1:
 | `--deals 200` | Quick run (default is 1000 deals per half) |
 | `--seed 42` | Different cards. The same seed always deals the same cards |
 | `--json out.json --logs` | Save the full result and every hand to a file |
+| `--verbose` | Print every hand as it finishes: cards, board, every action, the result. Watching only, off by default |
+
+### Watching the bot's reasoning (optional, off by default)
+
+These switches only print to your terminal. They don't change play, scoring, or the submission, and the tournament never sets them.
+
+| What | How to turn on | How to turn off |
+|---|---|---|
+| Every hand, both seats | add `--verbose` to the judge command | leave it out |
+| Our bot's decision per action: equity, opponent stats, EV per action, the mix, and whether a scenario rule fired | start the bot with `BOT_TRACE=1`, e.g. `BOT_TRACE=1 PORT=5008 python agent.py` (macOS/Linux). On Windows PowerShell: `$env:BOT_TRACE=1; $env:PORT=5008; python agent.py` | start the bot without `BOT_TRACE` |
+
+Bot trace lines look like this:
+`[bot] hand 0 FLOP cards 6h Th ... | equity 0.47 | to_call 4 pot 12 | opp aggr 0.36 fold 0.30 | EV ... | mix ... | mixed -> RAISE_HALF`
+
+The bot's `hand` number starts at 0, while the judge's hand number starts at 1.
+
+Full watch setup, in three terminals with the venv active:
+```
+# Terminal 1: our bot, with its reasoning shown
+BOT_TRACE=1 PORT=5008 python agent.py
+# Terminal 2: opponent
+PORT=5009 python baseline-bots/baseline_random.py
+# Terminal 3: judge, every hand shown
+python judge_engine.py --agent1 http://127.0.0.1:5008 --agent2 http://127.0.0.1:5009 --seed 7 --deals 50 --verbose
+```
+Swap the opponent for any other baseline, or for another bot port, to compare how our bot plays against each one.
 
 ### Reading the report
 | Line | Meaning |
@@ -86,11 +117,13 @@ python judge_engine.py combine h1.json h2.json
 ```
 
 ### Stop the servers
-Press Ctrl+C in each terminal. If a port says "already in use":
+Press Ctrl+C in each terminal. If a port says "already in use", stop every leftover bot server:
 
-| Mac | Windows |
+| Mac | Windows (PowerShell) |
 |---|---|
-| `lsof -ti :5008 \| xargs kill` | `Get-NetTCPConnection -LocalPort 5008 -State Listen \| % { Stop-Process -Id $_.OwningProcess -Force }` |
+| `pkill -f "agent.py\|baseline"` | `Get-CimInstance Win32_Process -Filter "Name='python.exe'" \| ? { $_.CommandLine -match 'agent\.py\|baseline' } \| % { Stop-Process -Id $_.ProcessId -Force }` |
+
+> **Always check that your bot actually started.** If its port is still taken, the new server exits with `error while attempting to bind`, and the judge silently plays the **old** bot still listening there. This produced misleading results during testing. On Windows, `Get-NetTCPConnection` may not show these listeners; check with `netstat -ano | findstr LISTENING | findstr :5008` instead.
 
 ---
 
@@ -98,7 +131,7 @@ Press Ctrl+C in each terminal. If a port says "already in use":
 
 This plays a full duplicate match in-process. Use it for trying ideas.
 ```
-python train/selfplay.py --opp random --deals 500          # opponents: random | call | half | pot
+python train/selfplay.py --opp random --deals 500          # opponents: random | call | half | pot | add1 | add2 | add3 | add4
 python train/selfplay.py --opp pot --deals 1000 --seed abc
 python train/selfplay.py --opp bot/params_old.json         # vs another saved params file
 ```
@@ -156,6 +189,22 @@ Other useful fields in `out.json`: `paired_bb` (our result per deal), `ci`, and 
 
 ---
 
+## 4b. Hand data and decision audit (optional, local)
+
+Play 8 baselines x several seeds over HTTP and flatten every hand and action into two CSVs (git-ignored, in `data/`):
+```
+python tools/gen_hands.py                      # all 8 baselines x seeds 7 11 42, 1000 deals (about 15 min)
+python tools/gen_hands.py --seeds 7 --opps add1 add3 --deals 200 --out data/quick
+```
+Then audit our decisions (replays each hand, compares our equity with the pot odds we were getting; immediate pot odds only, so read the numbers as a ranking):
+```
+python tools/audit.py                          # about 30 s on 10 cores; writes data/audit_decisions.csv
+python tools/audit.py --data data/quick --sample 0.2
+```
+The CSVs can be uploaded to Databricks (`hands`, `actions`, `audit_decisions`).
+
+---
+
 ## 5. Re-fit preflop strength
 
 This simulates random hands, then fits the `preflop` weights in `bot/params.json`:
@@ -172,7 +221,15 @@ python train/fit_preflop.py --hands 3000 --samples 200     # about 45 s on a lap
 python train/tune.py --iters 20 --deals 300 --seed 1 --out runs/1.json
 python train/tune.py --pick runs        # copy the best run into bot/params.json
 ```
-It prints `iteration  score  best` per attempt. Run several seeds in parallel terminals for more coverage.
+It prints `iteration  score  best` per attempt. Run several seeds in parallel terminals for more coverage (`--procs 10` scores one candidate on 10 cores).
+
+**The opponent pool.** A candidate plays the 8 baselines (4 originals + `add1`..`add4`), every saved past version in `bot/pool/*.json`, and 3 style variants of the incumbent (loose, sticky, tight). Its score is the mean of the 4 **worst** results, so it can't win just by beating weak bots. After accepting a new version, copy it to `bot/pool/vN.json` so future candidates must beat it too.
+
+**Accept test (held-out seeds).** Never install a winner on the tuner's score alone:
+```
+python train/compare.py bot/params.json runs/1.json --deals 1000 --seeds hold1 hold2
+```
+It prints bb/deal vs every pool opponent, the mean and the worst result, and a head-to-head match vs the incumbent. It says `ACCEPT` only if the head-to-head interval is entirely above 0 and neither the pool mean nor the worst result is lower. Use seeds the tuner never saw.
 
 ### On the Grace cluster (Slurm)
 ```

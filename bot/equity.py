@@ -1,9 +1,19 @@
 """Hand strength: preflop features (fitted offline) and Monte Carlo equity."""
+import math
 from collections import Counter
+from itertools import combinations
 
-from evaluator import omaha_score
+from evaluator import get_table, omaha_score
+
+try:  # numpy is in the tournament base image; without it we fall back to the slow pure-Python path
+    import numpy as np
+except ImportError:  # pragma: no cover
+    np = None
 
 FEATURES = ("pairs", "trips", "suits2", "suits4", "ace_suited", "conn", "high")
+_PAIRS = np.array(list(combinations(range(5), 2))) if np else None
+_TRIPLES = np.array(list(combinations(range(5), 3))) if np else None
+_NP = {}  # built once by _np_tables(): colex-rank -> score array and binomial table
 
 
 def preflop_features(hole) -> list[float]:
@@ -27,8 +37,53 @@ def preflop_equity(hole, weights: dict) -> float:
     return min(0.95, max(0.05, weights["bias"] + sum(weights[k] * v for k, v in zip(FEATURES, f))))
 
 
+def _np_tables():
+    """Score of every 5-card hand in an int32 array indexed by the hand's combination rank
+    (sum of C(card_i, i+1) over the ascending cards), so scoring is one array lookup."""
+    if not _NP:
+        binom = np.array([[math.comb(n, k) for n in range(36)] for k in range(6)], dtype=np.int64)
+        combos = np.array(list(combinations(range(36), 5)), dtype=np.int64)
+        rank = sum(binom[i + 1][combos[:, i]] for i in range(5))
+        table = get_table()
+        masks = (np.int64(1) << combos).sum(axis=1).tolist()
+        score = np.empty(len(combos), dtype=np.int32)
+        score[rank] = np.fromiter((table[m] for m in masks), dtype=np.int32, count=len(masks))
+        _NP.update(binom=binom, score=score)
+    return _NP["binom"], _NP["score"]
+
+
+def warmup_np() -> None:
+    if np is not None:
+        _np_tables()
+
+
+def omaha_scores(hole, board):
+    """omaha_score for many hands at once: hole and board are int arrays of shape (n, 5)."""
+    binom, score = _np_tables()
+    n = hole.shape[0]
+    h = np.broadcast_to(hole[:, _PAIRS][:, :, None, :], (n, 10, 10, 2))
+    b = np.broadcast_to(board[:, _TRIPLES][:, None, :, :], (n, 10, 10, 3))
+    five = np.sort(np.concatenate([h, b], axis=3), axis=3)
+    idx = sum(binom[i + 1][five[..., i]] for i in range(5))
+    return score[idx].reshape(n, 100).max(axis=1)
+
+
 def mc_equity(hole, board, n: int, rng) -> float:
-    """Equity vs one random hand, sampling the rest of the board."""
+    """Equity vs one random hand, sampling the rest of the board (vectorised with numpy)."""
+    if np is None:
+        return _mc_equity_py(hole, board, n, rng)
+    deck = np.array([c for c in range(36) if c not in set(hole) | set(board)])
+    need = 5 - len(board)
+    g = np.random.default_rng(rng.getrandbits(64))
+    draw = deck[g.random((n, len(deck))).argsort(axis=1)[:, :5 + need]]  # distinct cards per sample
+    full = np.concatenate([np.broadcast_to(np.array(board, dtype=np.int64), (n, len(board))), draw[:, 5:]], axis=1)
+    me = omaha_scores(np.broadcast_to(np.array(hole, dtype=np.int64), (n, 5)), full)
+    op = omaha_scores(draw[:, :5], full)
+    return float(((me > op) + 0.5 * (me == op)).mean())
+
+
+def _mc_equity_py(hole, board, n: int, rng) -> float:
+    """Pure-Python version (reference and fallback)."""
     dead = set(hole) | set(board)
     deck = [c for c in range(36) if c not in dead]
     board, need = tuple(board), 5 - len(board)

@@ -1,6 +1,6 @@
 # Notes (shared hackathon context)
 
-Last updated: 2026-11-07 (bot v1.2: adaptor params, 3 s budget, no-cliff throttle, training-only overrides)
+Last updated: 2026-11-07 (merge of r-poc into spoc: v2 params kept, numpy equity, both opponent sets, both data pipelines)
 
 ## Problem statement
 - TAMU Datathon Poker Bot Challenge: Heads-Up Short Deck (36 cards) 5-card Pot-Limit Omaha.
@@ -13,32 +13,34 @@ Last updated: 2026-11-07 (bot v1.2: adaptor params, 3 s budget, no-cliff throttl
 
 ## Goal / winning idea
 - Equity + pot-odds EV for each action, then a softmax **mixed strategy** (deliberately unpredictable to opponent-modelling bots).
-- An opponent model (aggression, fold-to-raise) shifts call and bluff decisions. The current params adapt fast (`prior_weight` 4).
-- Trainable: every number is in `bot/params.json`, tuned by self-play (`train/tune.py`, Grace via `train/grace.slurm`).
+- An opponent model (aggression, fold-to-raise) shifts call and bluff decisions.
+- Trainable: every number is in `bot/params.json`, tuned by self-play (`train/tune.py`, Grace via `train/grace.slurm`), accepted only via `train/compare.py`.
 - Real-life play experience goes in `bot/scenarios.json` as override rules.
 
 ## Team
 - Team: **Straight Flush**. Bot: **Patrick Jane**.
-- Work split: TBD.
+- Work split: TBD. Branches: `r-poc` (Ritik), `spoc` (Sanket; merged r-poc on 2026-11-07), `db-equity-model` (learned equity model).
 
 ## Current state of the code
 - `agent.py`: names set, and the 3 functions delegate to `bot/strategy.py` inside try/except (fallback CHECK_CALL). Server plumbing untouched.
-- `bot/equity.py`: preflop features (linear weights fitted by `train/fit_preflop.py`, R²≈0.77) and Monte Carlo equity.
-- `bot/opponent.py`: opponent stats kept in `memory`. `bot/strategy.py`: EV, softmax, scenarios, and the time-budget throttle.
-- `bot/params.json` = the "adaptor" settings plus `time_budget` 3.0. Head-to-head vs the previous params (`train/opps/past_best.json`): +1.41 bb/deal over 3000 deals, CI [+0.83, +1.99].
-- Trade-off: the new params beat smarter opponents but take less from simple ones (vs calling_station ≈ +6 alone vs the old params' +8). Every baseline is still a significant win, and points only need CI > 0.
-- Judge (1000 deals, seed 7): random +10.2, always_pot +5.9, calling_station +7.4, always_half +11.9 bb/deal. 4/4 wins, 0 errors, ≤5.05 s thinking per half.
-- Test opponents: the 4 starter baselines, plus `train/opps/{past_best,adaptor,hyper_pass,hyper_agg}.json` (our strategy code with other params; use them via `selfplay.py --opp <json>`). Hardest: adaptor and hyper_pass.
+- `bot/equity.py`: preflop features (linear weights fitted by `train/fit_preflop.py`, R²≈0.77) and Monte Carlo equity **vectorised with numpy** (`omaha_scores`, exact match with `evaluator.omaha_score`; pure-Python fallback). The score table is built at startup by `strategy.load_params()`.
+- `bot/strategy.py`: EV, softmax, scenarios, an **optional learned equity model hook** (`bot/equity_model.py` with `predict(hole, board)`; ignored if absent, and errors fall back to Monte Carlo), and the time throttle. The throttle keeps a floor of `mc_min` post-flop samples until `time_budget` is spent (no cliff on a busy CPU).
+- **Params: v2 kept** (`bot/params.json` = `bot/pool/v2.json`, `time_budget` 4.0). Merge comparison (`compare.py`, 14 opponents × 3 seeds × 1000 deals): v2 vs the adaptor params head-to-head −0.01, CI [−0.56, +0.54] (tie). The adaptor has a higher pool mean (3.91 vs 3.56) but loses to the Nit (−1.46 vs −0.29), so it was REJECTED. A tie scores more than a loss.
+- **Judge over HTTP (verified fresh server), v2, seeds 21 and 23, 1000 deals each:** random +7.4/+6.5, always_pot +6.1/+5.7, calling_station +4.6/+4.8, always_half +11.5/+12.8, add1 ValueBettor +1.8/+1.5, add2 Maniac +2.0/+2.7, add4 Adaptive +2.1/+3.4 (all wins); add3 Nit 0.0/+0.0 (CHOP). 14 wins, 2 chops, 0 errors, thinking 1.2–4.5 s of 8 s per half.
+- Simulator (3000 deals) agrees: v2 beats v1 +1.32, add1 +1.16, add2 +2.19, add4 +2.07, hyper_pass +2.32, calling station +4.59; ties add3 (−0.15) and the adaptor (−0.14).
+- **Opponents:** 4 starter baselines; `add1..add4` (`baseline-bots/opponents.py`, servers `baseline-add-N.py`); `train/opps/{past_best,adaptor,hyper_pass,hyper_agg}.json`; past versions in `bot/pool/*.json`. All of these are in `selfplay.opponent_pool()`, used by tune.py and compare.py. The Nit (add3) is our hardest opponent (only a chop).
+- **Data:** `tools/gen_hands.py` (full hand histories into Databricks `workspace.default.hands/actions`; `tools/audit.py` replays them) and `train/gen_logs.py` (one row per decision with our equity and opponent read). Both are documented: RUNNING.md and `DATABRICKS.md`. `data/` is git-ignored.
+- Watch tools (off by default): judge `--verbose`; `BOT_TRACE=1` prints equity/EV/mix per decision.
+- Audit findings (24k hands vs the 4 starter baselines; immediate pot odds only, so upper bounds): we fold too many hands worth calling, mostly vs always_pot and always_half. Lowering `bet_discount` hurt vs the stronger bots, so that is not the fix.
 - How to run everything: `RUNNING.md`.
-- Data for analysis: `train/gen_logs.py` writes one row per decision (with the hand outcome) vs all 8 opponents. The Databricks workflow (Delta table, Genie leak-finding, logistic fit of "what an opponent's bet means") is in `DATABRICKS.md`. `data/` is git-ignored.
 
 ## Key decisions
 - Keep the plumbing in `agent.py` unchanged. Strategy code lives in `bot/`.
-- `time_budget` 3.0 s. Tests: 3 vs 4 s was a tie, 1.5 s lost −1.7, and 20 s (training-only) was a tie, so extra thinking barely helps. The judge also charges ~2 s per half of request overhead the bot can't see, so local total ≈5 of 8 s.
-- Throttle never drops post-flop simulation to 0 while budget remains (keeps a floor of `mc_min` samples). A busy CPU previously made the bot fall back to preflop-only equity and lose ~2.5 bb/deal.
+- More thinking barely helps: `mc_n` 300 was neutral, and a training-only 20 s budget tied. Too little hurts: adaptor at 1.5 s lost −1.7 to 3 s.
+- Accept new params only if `train/compare.py` says ACCEPT on fresh seeds (head-to-head CI > 0, pool mean and worst result not lower), then copy them to `bot/pool/vN.json`.
 - **Training-only overrides** (which may exceed competition limits) go in `train/local/*.json` (git-ignored), passed with `--local` to `selfplay.py`/`tune.py`. They must never reach `bot/params.json` or the repo; `test_shipped_params_are_competition_legal` guards this.
-- `selfplay.py` restarts the bots every 1000 deals (a real half), so `--deals 3000` = 3 real matches. Before this fix, runs over 1000 deals starved the time budget; the old claims "3 s budget loses −2.0" and "a faster equity engine is the main lever" came from that bug and are **wrong**.
-- For close comparisons, use ≥3000 deals: even a mirror match can look "significant" over 1000.
-- `train/tune.py` scores every candidate in a chain on the same deals. Validate winners on held-out seeds; don't trust `--pick` alone.
+- `selfplay.py` restarts the bots every 1000 deals (a real half), so `--deals 3000` = 3 real matches. Before this fix, runs over 1000 deals starved the time budget (results from such runs before the fix are invalid; tune/compare defaults were ≤1000, so v2's acceptance is valid).
+- For close comparisons use ≥3000 deals: even a mirror match can look "significant" over 1000.
+- **HTTP testing pitfall:** if a port is still taken, a new bot server exits with a bind error and the judge silently plays the OLD bot. This produced several wrong results on 2026-11-07. Always kill leftover servers and check for bind errors (RUNNING.md §2).
 - Use `127.0.0.1`, not `localhost`, for judge URLs (the judge failed to reach the bots through `localhost` on Windows).
-- numpy is a dev-only dependency (training). The base image already has it, and `requirements.txt` is unchanged.
+- numpy is used by the bot at runtime (`bot/equity.py`). The tournament base image already has it and `requirements.txt` is unchanged; there is a pure-Python fallback. Confirm with `tools/check_build.sh`.

@@ -22,4 +22,5 @@ Thumbs.db
 
 # Training-only overrides (may exceed competition limits) - never commit
 train/local/
+# Generated hand logs (tools/gen_hands.py)
 data/

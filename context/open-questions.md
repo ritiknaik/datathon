@@ -7,3 +7,5 @@ Add an entry when context conflicts or a decision is unresolved. Remove it once 
 - Team work split: not decided yet.
 - Before submission: the repo must be public, Docker `tools/check_build.sh` must pass, and team registration must be done.
 - Grace: confirm the account, and the Python 3.10+ module name for `train/grace.slurm`.
+- numpy at runtime: the bot now imports numpy (in the base image per the README). Confirm with `tools/check_build.sh` once Docker is running.
+- Tuning trade-off: v2 beats strong baselines but earns less vs random/calling_station than v1. Decide what we expect the tournament field to look like.

@@ -650,13 +650,34 @@ def _hand_log(half: int, deal_index: int, button: int, game: Game) -> dict[str, 
 # Playing and scoring
 # ---------------------------------------------------------------------------
 
+def format_hand(log: dict[str, Any], a1_seat: int) -> str:
+    """Readable block for one finished hand (printed by --verbose)."""
+    def who(seat: int) -> str:
+        return "agent1" if seat == a1_seat else "agent2"
+
+    out = [f"hand {log['deal_index'] + 1:>4} | half {log['half']} | button: seat {log['button_seat']}"]
+    for seat in (0, 1):
+        out.append(f"  {who(seat):<6} seat {seat}: {' '.join(log['hole_cards'][seat])}")
+    if log["board_revealed"]:
+        out.append(f"  board: {' '.join(log['board_revealed'])}")
+    acts = [f"{a['street'].lower()} {who(a['seat'])} {a['action'].lower()}"
+            + (f" to {a['street_total']}" if a["action"].startswith("RAISE") else "")
+            for a in log["actions"]]
+    out.append("  actions: " + (" | ".join(acts) if acts else "(none)"))
+    nets = log["nets"]
+    showdown = "showdown" if log["went_to_showdown"] else "no showdown"
+    out.append(f"  pot {log['pot']} | agent1 {nets[a1_seat]:+d} | agent2 {nets[1 - a1_seat]:+d} | {showdown}")
+    return "\n".join(out)
+
+
 def play_half(agent1: HttpAgentHandle, agent2: HttpAgentHandle, match_seed: Any, half: int,
-              num_deals: int = NUM_DEALS, keep_logs: bool = False) -> HalfResult:
+              num_deals: int = NUM_DEALS, keep_logs: bool = False, verbose: bool = False) -> HalfResult:
     """Play ONE half: tell both bots to start fresh, then play num_deals hands.
 
     `half` decides the seats: in half 1 agent1 is seat 0, in half 2 agent1
     is seat 1. Both halves of a match must use the same match_seed and
-    num_deals, so they deal the same cards.
+    num_deals, so they deal the same cards. `verbose` prints every hand as
+    it finishes (local viewing only; it changes nothing about the play).
     """
     match_seed = str(match_seed)            # store it the same way every time
     a1_seat = agent1_seat_for_half(half)    # also checks that half is 1 or 2
@@ -664,6 +685,8 @@ def play_half(agent1: HttpAgentHandle, agent2: HttpAgentHandle, match_seed: Any,
     bots = (agent1, agent2) if a1_seat == 0 else (agent2, agent1)
     for bot in bots:
         bot.start_half()
+    if verbose:
+        print(f"== half {half}: seat 0 = {bots[0].describe()} | seat 1 = {bots[1].describe()}", flush=True)
 
     nets_by_seat: tuple[list[int], list[int]] = ([], [])
     logs: Optional[list[dict[str, Any]]] = [] if keep_logs else None
@@ -680,8 +703,12 @@ def play_half(agent1: HttpAgentHandle, agent2: HttpAgentHandle, match_seed: Any,
         nets_by_seat[1].append(res.nets[1])
         for seat in (0, 1):
             bots[seat].hand_end(game.hand_result(seat))
-        if logs is not None:
-            logs.append(_hand_log(half, d, button, game))
+        if logs is not None or verbose:
+            log = _hand_log(half, d, button, game)
+            if logs is not None:
+                logs.append(log)
+            if verbose:
+                print(format_hand(log, a1_seat), flush=True)
 
     for bot in bots:
         bot.flush_hand_results()  # deliver the last hands of the half
@@ -792,15 +819,15 @@ def combine_halves(half1: HalfResult, half2: HalfResult) -> MatchResult:
 
 
 def play_match(agent1: HttpAgentHandle, agent2: HttpAgentHandle, match_seed: Any,
-               num_deals: int = NUM_DEALS, keep_logs: bool = False) -> MatchResult:
+               num_deals: int = NUM_DEALS, keep_logs: bool = False, verbose: bool = False) -> MatchResult:
     """LOCAL PRACTICE ONLY: play both halves back to back, then score them.
 
     The same two bot processes play both halves, so a bot could remember
     half 1's cards in half 2. That's fine for testing your own bot, but the
     tournament never does this: it plays each half in a separate pod.
     """
-    half1 = play_half(agent1, agent2, match_seed, 1, num_deals, keep_logs)
-    half2 = play_half(agent1, agent2, match_seed, 2, num_deals, keep_logs)
+    half1 = play_half(agent1, agent2, match_seed, 1, num_deals, keep_logs, verbose)
+    half2 = play_half(agent1, agent2, match_seed, 2, num_deals, keep_logs, verbose)
     return combine_halves(half1, half2)
 
 
@@ -939,6 +966,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--deals", type=int, default=NUM_DEALS, help=f"deals per half (default {NUM_DEALS})")
     p.add_argument("--json", metavar="PATH", help="also write the full result as JSON")
     p.add_argument("--logs", action="store_true", help="include every hand in the JSON")
+    p.add_argument("--verbose", action="store_true",
+                   help="print every hand as it finishes (cards, board, actions, result); "
+                        "for watching only, off by default")
     return p
 
 
@@ -1000,11 +1030,13 @@ def main_play(argv: list[str]) -> int:
     warmup()  # build the hand-ranking table before play starts
     try:
         if half is not None:
-            half_result = play_half(bot1, bot2, args.seed, half, args.deals, keep_logs=args.logs)
+            half_result = play_half(bot1, bot2, args.seed, half, args.deals,
+                                    keep_logs=args.logs, verbose=args.verbose)
             _write_json(args.json, half_result.to_json(indent=2))
             report = format_half_report(half_result)
         else:
-            match_result = play_match(bot1, bot2, args.seed, args.deals, keep_logs=args.logs)
+            match_result = play_match(bot1, bot2, args.seed, args.deals,
+                                      keep_logs=args.logs, verbose=args.verbose)
             _write_json(args.json, match_result.to_json(indent=2))
             report = format_report(match_result)
     except Exception:
