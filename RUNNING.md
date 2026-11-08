@@ -125,6 +125,25 @@ Press Ctrl+C in each terminal. If a port says "already in use":
 
 ---
 
+## 2b. Two of our own bots against each other (different branches, commits or folders)
+
+One command plays the match the way the tournament does and prints the verdict:
+```
+python tools/versus.py --a r-poc --b origin/other-branch --deals 1000 --seed 7
+python tools/versus.py --a . --b 3d5fd02          # "." = your working tree, a commit id works too
+python tools/versus.py --a ../teammate-checkout --b .
+```
+- **A and B** can each be a git ref (branch, `origin/branch`, commit) or a folder with an `agent.py`. A ref is checked out into a temporary git worktree (your working tree is not touched), so each bot runs with its own code, `bot/` and `params.json`. Run `git fetch` first for remote branches.
+- **Same rules as the tournament:** each half is played on fresh servers (both bots are restarted between halves), both halves use the same cards with the seats swapped, and the verdict is the 95% confidence interval on **A's bb/deal over the paired halves**: entirely above 0 = A wins (1 point), entirely below 0 = B wins, otherwise a chop (0.5 each). A forfeit in either half loses the match.
+- **A is "agent1"** in the report. Swap `--a` and `--b` to see it from the other side (the sign flips).
+- Use the full 1000 deals, and repeat with a few seeds (`--seed 7`, `11`, `42`). With few deals a real edge shows up as a chop. The tournament's seed is secret.
+- It uses ports 5008 and 5009 (`--ports 6008 6009` to change them), so stop other bots first. `--json out.json` saves the combined result.
+- For two parameter sets of the SAME code, `python train/compare.py a.json b.json --seeds s1 s2` is faster (it plays in-process against the whole opponent pool as well).
+
+By hand (what the script does): start A with `PORT=5008 python agent.py` in its folder and B with `PORT=5009 python agent.py` in its folder, run `python judge_engine.py --half 1 --seed 7 --json h1.json`, **restart both**, run `--half 2 --json h2.json`, then `python judge_engine.py combine h1.json h2.json`.
+
+---
+
 ## 3. Fast simulation (no servers, about 10× quicker)
 
 This plays a full duplicate match in-process. Use it for trying ideas.
