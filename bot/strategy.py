@@ -20,6 +20,13 @@ try:  # optional: numpy-only learned equity model exported from Databricks (bot/
 except Exception:  # missing file, missing/corrupt weights, anything: never fail at startup
     equity_model = None
 
+from . import policy_features
+
+try:  # optional: learned decision ensemble (bot/policy_model.py + policy_weights.npz), see databricks/ENSEMBLE_PLAN.md
+    from . import policy_model
+except Exception:  # no weights yet, or broken: the rules play alone
+    policy_model = None
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 TRACE = os.environ.get("BOT_TRACE") == "1"  # watching only: one line per decision on stderr, off by default
 
@@ -79,6 +86,16 @@ def _scenario(obs, eq: float, P: dict) -> dict | None:
     return None
 
 
+def _blend(obs, eq, ev, agg, fold, P):
+    """Rule EV + policy_w * the ensemble's advantage (centred over the legal actions). Never raises."""
+    try:
+        adv = policy_model.predict(policy_features.build(obs, eq, ev, agg, fold))
+        mean = sum(adv[int(a)] for a in ev) / len(ev)
+        return {a: v + P["policy_w"] * (float(adv[int(a)]) - mean) for a, v in ev.items()}
+    except Exception:
+        return ev  # a broken model must never cost an error
+
+
 def decide(obs, memory: dict, P: dict) -> Action:
     t0 = time.perf_counter()
     opponent.observe(obs, memory)
@@ -101,9 +118,12 @@ def decide(obs, memory: dict, P: dict) -> Action:
             add = min(obs.raise_to[a] - obs.my_bet, tc + opp_add)
             ev[a] = fe * pot + (1 - fe) * (eq_called * (pot + add + opp_add) - add)
 
+    memory["last"] = (eq, ev, agg, fold)  # what this decision saw (read by train/policy_data.py)
     probs = _scenario(obs, eq, P)
     from_scenario = probs is not None
     if probs is None:
+        if policy_model is not None and P.get("use_policy_model"):  # opt-in, accepted by train/compare.py
+            ev = _blend(obs, eq, ev, agg, fold, P)
         scale = P["temperature"] * max(pot, 1)
         top = max(ev.values())
         probs = {a: math.exp((v - top) / scale) for a, v in ev.items()}

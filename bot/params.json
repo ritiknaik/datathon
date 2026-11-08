@@ -11,7 +11,7 @@
   },
   "time_budget": 4.0,
   "decisions_per_hand": 2.0,
-  "sample_cost": 0.00012,
+  "sample_cost": 2e-05,
   "mc_n": 60,
   "mc_min": 8,
   "temperature": 0.0515,
@@ -26,5 +26,7 @@
   "prior_weight": 18.6375,
   "agg_prior": 0.1354,
   "fold_prior": 0.1389,
-  "discount_needs_raise": 1
+  "discount_needs_raise": 1,
+  "use_policy_model": 1,
+  "policy_w": 1.0
 }

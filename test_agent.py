@@ -304,3 +304,50 @@ def test_a_broken_model_module_cannot_stop_the_bot_from_starting(tmp_path):
     env = {**os.environ, "PYTHONPATH": os.pathsep.join([str(tmp_path), BUNDLE])}
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, cwd=str(tmp_path))
     assert out.returncode == 0 and out.stdout.strip() == "None", out.stderr
+
+
+def test_policy_features_have_a_fixed_length_and_are_finite():
+    import math
+    from bot import policy_features, strategy
+    P = strategy.load_params()
+    mem = {}
+    strategy.new_half(50, mem)
+    game = Game(make_deal("feat", 3), 1, hand_index=3)
+    while not game.is_terminal:
+        obs = game.observation(game.to_act)
+        a = strategy.decide(obs, mem, P)
+        f = policy_features.build(obs, *mem["last"])
+        assert len(f) == policy_features.N_FEATURES and all(math.isfinite(x) for x in f)
+        game.apply(a)
+
+
+def test_policy_model_is_off_unless_params_ask_and_a_broken_one_is_ignored(bot):
+    from bot import strategy
+    P = {k: v for k, v in strategy.load_params().items() if k not in ("use_policy_model", "policy_w")}
+    obs = Game(make_deal(2, 0), 0).observation(0)
+
+    class Broken:
+        @staticmethod
+        def predict(x):
+            raise RuntimeError("bad weights")
+
+    old = strategy.policy_model
+    try:
+        strategy.policy_model = Broken
+        for params in (P, {**P, "use_policy_model": 1, "policy_w": 1.0}):
+            mem = {}
+            strategy.new_half(10, mem)
+            assert strategy.decide(obs, mem, params) in obs.legal_actions
+    finally:
+        strategy.policy_model = old
+
+
+def test_a_broken_policy_model_cannot_stop_the_bot_from_starting(tmp_path):
+    import shutil
+    import subprocess
+    shutil.copytree(os.path.join(BUNDLE, "bot"), tmp_path / "bot", ignore=shutil.ignore_patterns("__pycache__"))
+    (tmp_path / "bot" / "policy_weights.npz").write_bytes(b"not a real npz file")
+    code = "from bot import strategy; print(strategy.policy_model)"
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join([str(tmp_path), BUNDLE])}
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, cwd=str(tmp_path))
+    assert out.returncode == 0 and out.stdout.strip() == "None", out.stderr

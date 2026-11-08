@@ -1,6 +1,6 @@
 # Notes (shared hackathon context)
 
-Last updated: 2026-11-07 (params v3, Databricks equity model evaluated)
+Last updated: 2026-11-07 (branch ml-ensemble: learned decision ensemble, Phase 0 GO)
 
 ## Problem statement
 - TAMU Datathon Poker Bot Challenge: Heads-Up Short Deck (36 cards) 5-card Pot-Limit Omaha.
@@ -34,6 +34,10 @@ Last updated: 2026-11-07 (params v3, Databricks equity model evaluated)
 - Watch tools (all off by default, local only): judge `--verbose` prints every hand; `BOT_TRACE=1` prints the bot's equity/EV/mix per decision. `tools/gen_hands.py` writes `data/hands.csv` + `data/actions.csv` (git-ignored; loaded into Databricks as `workspace.default.hands/actions`). `tools/audit.py` replays them and compares our equity with pot odds.
 - Audit findings (24k hands vs the 4 baselines; immediate pot odds only, so upper bounds): we fold too many hands worth calling, mostly vs always_pot (≈40 bb/100 hands) and always_half (≈27); 91% of preflop folds were +EV calls. Most big showdown losses were bad luck (equity ≥0.5), not bad commits. Part of the leak is the softmax noise (`temperature`).
 - Not done yet: more tuning rounds (accept only via `train/compare.py`), `scenarios.json` rules, Docker build check (Docker CLI + Colima installed locally, daemon not started).
+
+- **Branches:** `r-poc` = rule-based bot v3 (backup, also tag `rule-based-v3`, Docker check passed). `ml-ensemble` = rule-based v3 + learned decision ensemble (plan and results in `databricks/ENSEMBLE_PLAN.md`). `spoc` = teammate bot (v2 params + throttle floor). Over 50 HTTP matches, `r-poc` vs `spoc` was 18 wins / 32 chops / 0 losses, pooled +0.73 [+0.58, +0.87] bb/deal.
+- **ml-ensemble bot:** score = rule EV + `policy_w` × ensemble advantage (ridge + 3 bagged MLPs on 30 features from `bot/policy_features.py`; weights `bot/policy_weights.npz`). Labels come from replaying each sampled decision with every action forced (`train/policy_data.py`); training is in `train/policy_train.py`. Opt-in via `use_policy_model` / `policy_w` (1.0); any model error falls back to the rules. `sample_cost` is 2e-5, so equity always uses 60 samples (training/match consistency).
+- **ml-ensemble results:** compare.py ACCEPT twice (+0.60, +0.55 bb/deal vs v3). Over HTTP: vs the rule-based backup 3 wins / 17 chops / 0 losses, pooled +0.41 [+0.22, +0.59]; vs `spoc` 14 wins / 6 chops / 0 losses, pooled +0.83. Against unseen styles (`spoc`'s train/opps) it is about even: better vs adaptive, worse vs passive. Next: Databricks rounds with more varied opponents. Not Docker-checked on this branch yet.
 
 ## Key decisions
 - Keep the plumbing in `agent.py` unchanged. Strategy code lives in `bot/`.

@@ -1,6 +1,30 @@
 # Ensemble decision model: plan (Databricks training)
 
-Team Straight Flush, bot Patrick Jane. Status: **proposal, not started.** Owner of each step is marked.
+Team Straight Flush, bot Patrick Jane. Branch `ml-ensemble`. The rule-based backup is tag `rule-based-v3` (= `r-poc` at 4661f22).
+
+**Status: Phase 0 done, result GO.** Next: the Databricks rounds (section 8).
+
+## Phase 0 results (local pilot)
+
+- **Data:** 21,627 labelled decisions from 307 work units (200 hands each, k = 4 playouts per action), generated in about 3 minutes on 10 cores (`train/policy_data.py`).
+- **Model:** ridge + 3 bagged MLPs (`train/policy_train.py`), 0.03 ms per decision, 161 KB weights file. On held-out seeds, the offline value per labelled decision went from +3.78 chips (rules only) to +4.29 (w = 1).
+- **Accept gate (`train/compare.py`, in-process, fresh seeds):** w = 1 gave +0.60 [+0.20, +1.01] (4 seeds), then +0.55 [+0.22, +0.88] (6 more). ACCEPT both times.
+- **Real HTTP matches (`tools/versus.py`, 1000 deals per half, fresh servers):**
+  - vs the rule-based backup: 3 wins, 17 chops, 0 losses; pooled +0.41 [+0.22, +0.59] bb/deal over 20,000 deals.
+  - vs `spoc`: 14 wins, 6 chops, 0 losses; pooled +0.83 [+0.67, +0.98]. (The rule-based bot won 18 of 50 vs `spoc`.)
+  - 0 errors; thinking 1.9 s median and 2.7 s max per half, while running 5 matches at once.
+- **Unseen opponent styles (`spoc`'s `train/opps`, not in the training pool), mixed:**
+
+  | Opponent | Rules | Ensemble |
+  |---|---|---|
+  | hyper_agg | +9.96 | +9.67 |
+  | hyper_pass | **+3.46** | +2.56 |
+  | adaptor | +0.67 | **+1.93** |
+
+  About even on average. The model has partly learned our pool's styles, so the Databricks rounds must add **more varied opponents** (especially passive ones). Keep `spoc`'s three styles as a held-out test, never as training opponents.
+- **Prerequisite done:** `sample_cost` set to 2e-5, so equity always uses `mc_n` = 60 samples (neutral, +0.11 not significant). Without it, the model's inputs at match time would differ from training.
+- **Not run:** the Track B pilot (opponent-type experts). The ensemble showed a gain, so Track A goes first.
+
 
 ## 1. Why, and what "success" means
 
@@ -134,7 +158,21 @@ and run its small self-test (policy_data.selftest()). Report compute type, avail
 selftest took. Do not edit any repo file.
 ```
 
-**G1: generate decision states at scale**
+**G1+G2 (merged in the code): generate AND label decision states at scale**
+```
+Use train.policy_data.generate_labeled(seed, opp_name, n_hands=200, k=8) from the repo; it plays one
+work unit and returns labelled rows (features[30], ev[4], q[4], q_std[4], street, facing_raise, pot,
+opponent, seed, hand_index). Do not re-implement any game, feature or policy code. The opponents and
+their sampling weights come from train.policy_data.pool(). Build a Spark job (mapInPandas, about 200
+partitions) over work units (seed "d1".."dN", opponent drawn by weight), so the total is about 200,000
+rows. Use NEW seed prefixes (not "p", which the pilot used). Write Delta table
+workspace.default.policy_rows. Run 20 units first and report the time per unit, then the full job.
+Report the row counts by street, opponent and facing_raise.
+```
+
+(The two prompts below are kept for reference only: the merged prompt above replaces them.)
+
+**G1 (old): generate decision states at scale**
 ```
 Use train.policy_data.generate_states(seed, n_hands, opponent_spec) from the repo. Do not re-implement
 any game, feature or policy code. Build a Spark job over (seed, opponent) work units: opponents and
@@ -165,6 +203,9 @@ more than 1% of rows are broken. Do not drop or alter rows without telling me.
 
 **G4: train the ensemble members**
 ```
+Reference implementation: train/policy_train.py (ridge + bagged numpy MLPs, split by seed, masked
+advantage loss, offline_value report, export). Run it on the Delta table at scale, or port it to the
+cluster without changing the method, then add the members below.
 Target = advantage per legal action (mask illegal ones out of the loss). Split train/test BY seed, never
 by row. Train with features exactly as stored (they came from bot/policy_features.py):
 (a) ridge regression, (b) 5 numpy MLPs 30->64->64->4 on bootstrap samples (seeds 1..5),
