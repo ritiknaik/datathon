@@ -233,3 +233,34 @@ or email addresses in notebook outputs. Report the branch name, commit id and th
 ```
 
 After G6, tell Claude: "db-policy-model is pushed". Step 7 (local gate) follows.
+
+## 9. Round 2: retrain the correction layer on the `league` bot
+
+**Why.** The shipped bot is now `league`: v3 rules + `spoc_db`'s Q-net (weight 0.85) + this ensemble as a correction (weight 0.5). The ensemble was trained on decisions and playouts of the *v3-only* bot, so it is now used on states and continuations it never saw. Round 2 relabels with the `league` bot itself playing (both in the forced-action spot and in every playout), and `spoc_db`'s bot (`pool/qnet1`) is now in the opponent pool. Same method as round 1, so the risk is low. Accept only if the local HTTP gate vs `league` passes.
+
+**Branch:** in Databricks, pull the Git folder to the latest **`league`**. The kernel is long-lived: after any pull or branch switch, remove every repo module (`bot`, `train`, `game`, `evaluator`, `selfplay`, `policy_data`, `opponents` and their submodules) from `sys.modules` before importing.
+
+**R0: setup check**
+```
+Read CLAUDE.md, context/notes.md and databricks/ENSEMBLE_PLAN.md (section 9) first. Pull the Git folder to
+the latest `league` branch and clear the repo modules from sys.modules. Add the repo root, train/ and
+baseline-bots/ to sys.path, call evaluator.warmup(). Print strategy.load_params()["qnet_weight"] (must be 0.85)
+and sorted(train.policy_data.pool()) (must include "pool/qnet1"). Run
+train.selfplay.match(strategy.load_params(), "pool/qnet1" spec from opponent_pool(), 100, "check") and
+policy_data.selftest(). Report compute type, cores, and selftest time. Do not edit any repo file.
+```
+
+**R1: generate and label (same as G1+G2, new names)**
+```
+Same as G1+G2 in section 8, with these changes: seed prefix "L2-" (never reuse "d" or "p"), Delta table
+workspace.default.policy_rows_r2, about 200,000 rows, 20-unit cost pilot first. Report rows by street,
+opponent and facing_raise, and the table version.
+```
+
+**R2: checks**: run G3 on `workspace.default.policy_rows_r2`.
+
+**R3: train**: run G4 on `policy_rows_r2` **only** (round-1 rows were labelled by a different bot, so their values are stale). MLflow experiment `poker_policy_ensemble`, run names ending `_r2`. Report offline value for w in {0, 0.25, 0.5, 1} as before.
+
+**R4: export, parity, hand over**: run G5, then G6 but push to a new branch **`db-league-r2`** (only `bot/policy_weights.npz`, `bot/policy_parity.npz`, `databricks/policy_ensemble_r2.ipynb`; placeholder `<your-databricks-user>` for workspace paths). Never force-push.
+
+After R4, tell Claude: "db-league-r2 is pushed". Gate: parity, `compare.py`, then 50 HTTP matches vs `league` and 25 vs `spoc_db`.
