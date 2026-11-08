@@ -28,5 +28,8 @@
   "fold_prior": 0.1389,
   "discount_needs_raise": 1,
   "use_policy_model": 1,
-  "policy_w": 1.0
+  "policy_w": 0.5,
+  "qnet_agg_lo": 0.75,
+  "qnet_agg_hi": 0.95,
+  "qnet_weight": 0.85
 }

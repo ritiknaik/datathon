@@ -351,3 +351,34 @@ def test_a_broken_policy_model_cannot_stop_the_bot_from_starting(tmp_path):
     env = {**os.environ, "PYTHONPATH": os.pathsep.join([str(tmp_path), BUNDLE])}
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, cwd=str(tmp_path))
     assert out.returncode == 0 and out.stdout.strip() == "None", out.stderr
+
+
+def test_qnet_blend_moves_ev_and_a_missing_or_broken_net_is_ignored(bot):
+    import math
+
+    from bot import q_features, qnet, strategy
+    P = strategy.load_params()
+    obs = Game(make_deal(3, 0), 0).observation(0)
+    mem = {}
+    strategy.new_half(10, mem)
+    f = q_features.build(obs, 0.5, 0.3, 0.3, 0)
+    assert qnet.LOADED and len(qnet.predict(f)) == 4 and all(math.isfinite(x) for x in qnet.predict(f))
+    ev = {a: 1.0 for a in obs.legal_actions}
+    assert strategy._qblend(obs, 0.5, ev, 0.3, 0.3, mem, {**P, "qnet_weight": 0}) == ev
+    assert strategy._qblend(obs, 0.5, ev, 0.3, 0.3, mem, {**P, "qnet_weight": 1.0}) != ev
+    assert strategy._qblend(obs, 0.5, ev, 0.99, 0.3, mem, P) == ev  # faded out vs a near-always raiser
+    for params in ({**P, "qnet_file": "missing.npz"}, P):
+        m = {}
+        strategy.new_half(10, m)
+        assert strategy.decide(obs, m, params) in obs.legal_actions
+
+
+def test_a_broken_qnet_cannot_stop_the_bot_from_starting(tmp_path):
+    import shutil
+    import subprocess
+    shutil.copytree(os.path.join(BUNDLE, "bot"), tmp_path / "bot", ignore=shutil.ignore_patterns("__pycache__"))
+    (tmp_path / "bot" / "q_weights.npz").write_bytes(b"not a real npz file")
+    code = "from bot import qnet, strategy; print(qnet.LOADED)"
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join([str(tmp_path), BUNDLE])}
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, cwd=str(tmp_path))
+    assert out.returncode == 0 and out.stdout.strip() == "False", out.stderr
